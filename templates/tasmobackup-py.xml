@@ -1,0 +1,42 @@
+<?xml version="1.0"?>
+<Container version="2">
+  <Name>TasmoBackup-py</Name>
+  <Repository>ghcr.io/blacksheep8732/tasmobackup-py:latest</Repository>
+  <Registry>https://github.com/blacksheep8732/tasmobackup-py/pkgs/container/tasmobackup-py</Registry>
+  <Network>bridge</Network>
+  <Shell>bash</Shell>
+  <Privileged>false</Privileged>
+  <Icon>https://raw.githubusercontent.com/blacksheep8732/tasmobackup-py/main/app/static/icon.png</Icon>
+  <WebUI>http://[IP]:[PORT:8000]/</WebUI>
+  <Overview>Backup all your Tasmota and WLED devices from one web UI - a modern Python rewrite of TasmoBackup.
+
+Scheduled and on-demand backups (Tasmota .dmp, WLED config + presets), one-click restore, device discovery via IP scan or MQTT, online status with ntfy/Gotify/webhook alerts, Tasmota time-zone check, and an optional firmware auto-update that is opt-in per device and always takes a fresh backup first.
+
+Login-protected, device passwords encrypted at rest, no tracking. German and English UI.</Overview>
+  <Support>https://github.com/blacksheep8732/tasmobackup-py/issues</Support>
+  <Project>https://github.com/blacksheep8732/tasmobackup-py</Project>
+  <TemplateURL>https://raw.githubusercontent.com/blacksheep8732/tasmobackup-py/main/templates/tasmobackup-py.xml</TemplateURL>
+  <ReadMe>https://raw.githubusercontent.com/blacksheep8732/tasmobackup-py/main/README.md</ReadMe>
+  <Category>HomeAutomation: Backup: Tools:Utilities</Category>
+  <ExtraSearchTerms>tasmota wled sonoff esp8266 esp32 backup firmware ota tasmobackup</ExtraSearchTerms>
+  <Requires>Tasmota/WLED devices reachable over HTTP from the Unraid server.</Requires>
+  <Changes>
+### 2026-09-14
+- Initial Community Applications release
+- PUID/PGID support, secret key generated automatically on first start
+  </Changes>
+  <Date>2026-09-14</Date>
+  <MinVer>6.12</MinVer>
+  <License>MIT</License>
+
+  <Config Name="WebUI" Target="8000" Default="8259" Mode="tcp" Description="Port of the web interface." Type="Port" Display="always" Required="true" Mask="false">8259</Config>
+  <Config Name="Appdata" Target="/data" Default="/mnt/user/appdata/tasmobackup-py" Mode="rw" Description="Database, secret key and all device backups." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/tasmobackup-py</Config>
+  <Config Name="Admin user" Target="TB_ADMIN_USER" Default="admin" Description="Web UI login name. Only used on the very first start." Type="Variable" Display="always" Required="true" Mask="false">admin</Config>
+  <Config Name="Admin password" Target="TB_ADMIN_PASSWORD" Default="" Description="Initial web UI password. Only used on the very first start - change it later in Settings." Type="Variable" Display="always" Required="true" Mask="true"></Config>
+  <Config Name="Default Tasmota user" Target="TB_TASMOTA_USER" Default="admin" Description="Web login used for devices without their own credentials." Type="Variable" Display="advanced" Required="false" Mask="false">admin</Config>
+  <Config Name="Default Tasmota password" Target="TB_TASMOTA_PASSWORD" Default="" Description="Web password used for devices without their own credentials. Leave empty if your devices have none." Type="Variable" Display="advanced" Required="false" Mask="true"></Config>
+  <Config Name="Secret key" Target="TB_SECRET_KEY" Default="" Description="Optional. Leave empty to generate one automatically (stored in appdata). If set, never change it - stored device passwords could no longer be decrypted." Type="Variable" Display="advanced" Required="false" Mask="true"></Config>
+  <Config Name="Login enabled" Target="TB_AUTH_ENABLED" Default="true" Description="Set to false only if an external auth proxy protects the web UI." Type="Variable" Display="advanced" Required="false" Mask="false">true</Config>
+  <Config Name="PUID" Target="PUID" Default="99" Description="User ID the app runs as (Unraid default: 99 = nobody)." Type="Variable" Display="advanced" Required="false" Mask="false">99</Config>
+  <Config Name="PGID" Target="PGID" Default="100" Description="Group ID the app runs as (Unraid default: 100 = users)." Type="Variable" Display="advanced" Required="false" Mask="false">100</Config>
+</Container>

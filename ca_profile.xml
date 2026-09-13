@@ -1,0 +1,10 @@
+<?xml version="1.0"?>
+<CommunityApplications>
+  <Profile>
+**TasmoBackup-py** - backup, restore and optional firmware auto-update for Tasmota and WLED devices, as a single container.
+
+This repository contains the app itself and its Unraid template. Please report bugs and ask questions via [GitHub Issues](https://github.com/blacksheep8732/tasmobackup-py/issues).
+  </Profile>
+  <Icon>https://raw.githubusercontent.com/blacksheep8732/tasmobackup-py/main/app/static/icon.png</Icon>
+  <WebPage>https://github.com/blacksheep8732/tasmobackup-py</WebPage>
+</CommunityApplications>

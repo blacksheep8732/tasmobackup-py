@@ -27,7 +27,14 @@ credentials, a login wall, and a real (safe) firmware-update flow.
 - Login-protected web UI, encrypted device passwords, no tracking
 - SQLite by default (MySQL/Postgres via `TB_DATABASE_URL`)
 
+## Unraid
+
+Install **TasmoBackup-py** from Community Applications, or add the template manually:
+`https://raw.githubusercontent.com/blacksheep8732/tasmobackup-py/main/templates/tasmobackup-py.xml`
+
 ## Quick start (Docker)
+
+Prebuilt image: `ghcr.io/blacksheep8732/tasmobackup-py:latest`
 
 ```bash
 cp .env.example .env
@@ -54,13 +61,14 @@ pytest -q
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `TB_SECRET_KEY` | *(insecure default)* | Signs sessions + encrypts device passwords. **Set this.** |
+| `TB_SECRET_KEY` | *(generated)* | Signs sessions + encrypts device passwords. If unset, a random key is created once in `data/.secret_key`. |
 | `TB_ADMIN_USER` / `TB_ADMIN_PASSWORD` | `admin` / `admin` | Initial web login |
 | `TB_AUTH_ENABLED` | `true` | Set `false` if behind external auth (e.g. Traefik) |
 | `TB_DATA_DIR` | `/data` | Where DB + backups live |
 | `TB_DATABASE_URL` | *(SQLite in data dir)* | e.g. `mysql+pymysql://user:pass@host/db` |
 | `TB_TASMOTA_USER` / `TB_TASMOTA_PASSWORD` | `admin` / *(empty)* | Default device credentials |
 | `TB_CONCURRENCY` | `15` | Max parallel device requests during scans/backups |
+| `PUID` / `PGID` | `1000` / `1000` | User/group the app runs as; owns the data dir (Unraid: `99` / `100`) |
 
 Runtime preferences (backup interval, retention, auto-update master switch, theme,
 admin password) are editable in the **Settings** page.
