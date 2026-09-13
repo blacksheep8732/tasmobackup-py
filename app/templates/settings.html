@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+{% block title %}: {{ t('nav.settings') }}{% endblock %}
+{% block content %}
+<form method="post" action="/settings">
+  <div class="card">
+    <strong>{{ t('settings.backups') }}</strong>
+    <p class="row"><label style="width:240px;">{{ t('settings.interval') }}</label>
+      <input name="backup_interval_hours" value="{{ settings.backup_interval_hours }}"></p>
+    <p class="row"><label style="width:240px;">{{ t('settings.maxcount') }}</label>
+      <input name="backup_max_count" value="{{ settings.backup_max_count }}"></p>
+    <p class="row"><label style="width:240px;">{{ t('settings.maxdays') }}</label>
+      <input name="backup_max_days" value="{{ settings.backup_max_days }}"></p>
+  </div>
+
+  <div class="card">
+    <strong>{{ t('settings.fw_section') }}</strong>
+    <p class="muted">{{ t('settings.fw_hint') }}</p>
+    <p class="row"><label style="width:240px;">{{ t('settings.fw_enable') }}</label>
+      <select name="auto_update_global">
+        <option value="N" {{ "selected" if settings.auto_update_global != "Y" }}>{{ t('common.off') }}</option>
+        <option value="Y" {{ "selected" if settings.auto_update_global == "Y" }}>{{ t('common.on') }}</option>
+      </select></p>
+  </div>
+
+  <div class="card">
+    <strong>{{ t('settings.discovery') }}</strong>
+    <p class="row"><label style="width:240px;">{{ t('settings.scan_default') }}</label>
+      <input name="scan_subnet" value="{{ settings.scan_subnet }}" placeholder="192.168.178.1/24"></p>
+  </div>
+
+  <div class="card">
+    <strong>{{ t('settings.online_section') }}</strong>
+    <p class="muted">{{ t('settings.online_hint') }}</p>
+    <p class="row"><label style="width:240px;">{{ t('settings.online_minutes') }}</label>
+      <input name="online_check_minutes" value="{{ settings.online_check_minutes or '5' }}" size="6"></p>
+  </div>
+
+  <div class="card">
+    <strong>{{ t('settings.notify_section') }}</strong>
+    <p class="muted">{{ t('settings.notify_hint') }}</p>
+    <p class="row"><label style="width:240px;">{{ t('settings.notify_url') }}</label>
+      <input name="notify_url" value="{{ settings.notify_url }}" style="min-width:340px;"
+             placeholder="https://ntfy.sh/mein-geheimes-topic"></p>
+    <p class="row"><label style="width:240px;">{{ t('settings.notify_format') }}</label>
+      <select name="notify_format">
+        <option value="ntfy" {{ "selected" if settings.notify_format != "json" }}>ntfy / Gotify</option>
+        <option value="json" {{ "selected" if settings.notify_format == "json" }}>JSON-Webhook</option>
+      </select></p>
+    <p class="row"><label style="width:240px;">{{ t('settings.notify_level') }}</label>
+      <select name="notify_min_level">
+        <option value="info" {{ "selected" if settings.notify_min_level == "info" }}>{{ t('level.info') }}</option>
+        <option value="warn" {{ "selected" if settings.notify_min_level != "info" and settings.notify_min_level != "error" }}>{{ t('level.warn') }}</option>
+        <option value="error" {{ "selected" if settings.notify_min_level == "error" }}>{{ t('level.error') }}</option>
+      </select></p>
+    <p class="row"><label style="width:240px;">{{ t('settings.events_days') }}</label>
+      <input name="events_max_days" value="{{ settings.events_max_days or '30' }}" size="6"></p>
+    <p class="row">
+      <button class="btn" type="submit" name="test_notify" value="1">{{ t('settings.notify_test') }}</button>
+      <span class="muted">{{ t('settings.notify_test_hint') }}</span>
+    </p>
+  </div>
+
+  <div class="card">
+    <strong>{{ t('settings.mqtt_section') }}</strong>
+    <p class="muted">{{ t('settings.mqtt_hint') }}</p>
+    <p class="row"><label style="width:240px;">{{ t('settings.mqtt_host') }}</label>
+      <input name="mqtt_host" value="{{ settings.mqtt_host }}" placeholder="192.168.1.10"></p>
+    <p class="row"><label style="width:240px;">{{ t('settings.mqtt_port') }}</label>
+      <input name="mqtt_port" value="{{ settings.mqtt_port or '1883' }}" placeholder="1883" size="6"></p>
+    <p class="row"><label style="width:240px;">{{ t('settings.mqtt_user') }}</label>
+      <input name="mqtt_user" value="{{ settings.mqtt_user }}"></p>
+    <p class="row"><label style="width:240px;">{{ t('settings.mqtt_password') }}</label>
+      <input name="mqtt_password" type="password" value="{{ settings.mqtt_password }}"></p>
+    <p class="row"><label style="width:240px;">{{ t('settings.mqtt_topic') }}</label>
+      <input name="mqtt_topic" value="{{ settings.mqtt_topic }}" placeholder="tasmotas"></p>
+    <p class="row"><label style="width:240px;">{{ t('settings.mqtt_autoscan') }}</label>
+      <select name="mqtt_autoscan">
+        <option value="N" {{ "selected" if settings.mqtt_autoscan != "Y" }}>{{ t('common.off') }}</option>
+        <option value="Y" {{ "selected" if settings.mqtt_autoscan == "Y" }}>{{ t('common.on') }}</option>
+      </select></p>
+  </div>
+
+  <div class="card">
+    <strong>{{ t('settings.appearance') }}</strong>
+    <p class="row"><label style="width:240px;">{{ t('settings.language') }}</label>
+      <select name="language">
+        {% for code, name in languages %}
+        <option value="{{ code }}" {{ "selected" if settings.language == code }}>{{ name }}</option>
+        {% endfor %}
+      </select></p>
+    <p class="row"><label style="width:240px;">{{ t('settings.timezone') }}</label>
+      <select name="timezone">
+        {% for tzname in timezones %}
+        <option value="{{ tzname }}" {{ "selected" if settings.timezone == tzname }}>{{ tzname }}</option>
+        {% endfor %}
+      </select></p>
+    <p class="row"><label style="width:240px;">{{ t('settings.theme') }}</label>
+      <select name="theme">
+        {% for tval in ["auto", "light", "dark"] %}
+        <option value="{{ tval }}" {{ "selected" if settings.theme == tval }}>{{ t('theme.' ~ tval) }}</option>
+        {% endfor %}
+      </select></p>
+    <p class="row"><label style="width:240px;">{{ t('settings.newpw') }}</label>
+      <input name="new_password" type="password" placeholder="{{ t('settings.newpw_ph') }}"></p>
+  </div>
+
+  <button class="btn btn-primary" type="submit">{{ t('btn.save') }}</button>
+</form>
+{% endblock %}

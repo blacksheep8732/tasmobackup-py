@@ -1,0 +1,136 @@
+{% extends "base.html" %}
+{% block title %}: {{ t('nav.devices') }}{% endblock %}
+{% block content %}
+
+{% if unseen_events %}
+<div class="banner">
+  <span>⚠️ {{ t('events.banner', count=unseen_events) }}</span>
+  <a class="btn" href="/events" style="margin-left:auto;">{{ t('events.show') }}</a>
+</div>
+{% endif %}
+
+<div class="card">
+  <div class="row" style="justify-content:space-between;">
+    <strong>{{ t('dev.heading') }}</strong>
+    <span class="muted">{{ t('dev.latest') }} {{ latest or t('common.unknown') }}</span>
+  </div>
+</div>
+
+<div class="card">
+  <div class="row">
+    <form class="row" method="post" action="/devices/add">
+      <input name="ip" placeholder="{{ t('dev.ip_placeholder') }}" required>
+      <input name="username" placeholder="{{ t('dev.user_opt') }}">
+      <input name="password" type="password" placeholder="{{ t('dev.pw_opt') }}">
+      <button class="btn btn-primary" type="submit">{{ t('dev.add') }}</button>
+    </form>
+    <form class="row" method="post" action="/scan" style="margin-left:auto;">
+      <input name="subnet_base" value="{{ scan_base }}" size="14">
+      <span class="muted">/</span>
+      <input name="subnet_cidr" value="{{ scan_cidr }}" size="3" style="width:56px;">
+      <button class="btn" type="submit">{{ t('scan.button') }}</button>
+    </form>
+    {% if mqtt_configured %}
+    <form method="post" action="/mqtt-scan">
+      <button class="btn" type="submit">{{ t('mqtt.scan') }}</button>
+    </form>
+    {% endif %}
+    <form method="post" action="/backup-all">
+      <button class="btn btn-ok" type="submit">{{ t('backup.all') }}</button>
+    </form>
+    <form method="post" action="/refresh-all">
+      <button class="btn" type="submit">{{ t('status.refresh_all') }}</button>
+    </form>
+  </div>
+</div>
+
+<div class="card" id="devices"
+     hx-get="/" hx-trigger="every 30s" hx-target="#devices" hx-select="#devices" hx-swap="outerHTML">
+  <table class="devices">
+    <thead>
+      <tr>
+        <th>{{ t('th.device') }}</th><th>{{ t('th.ip') }}</th><th>{{ t('th.type') }}</th>
+        <th>{{ t('th.version') }}</th><th>{{ t('th.lastbackup') }}</th>
+        <th>{{ t('th.autoupdate') }}</th><th>{{ t('th.actions') }}</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for r in rows %}
+      <tr>
+        <td>
+          <div class="cell-main">{{ r.d.name }}</div>
+          <div class="cell-sub nowrap">
+            {% if r.d.online %}
+              <span class="dot dot-on"></span><span class="txt-ok">{{ t('status.online') }}</span>
+            {% else %}
+              <span class="dot dot-off"></span><span class="txt-danger">{{ t('status.offline') }}</span>
+            {% endif %}
+            {% if r.d.last_seen %}
+              <span class="sep">·</span><span title="{{ fmt_dt(r.d.last_seen, '%Y-%m-%d %H:%M:%S') }}">{{ t('status.seen_ago', ago=ago(r.d.last_seen)) }}</span>
+            {% endif %}
+          </div>
+          {% if r.drift or r.fixed_tz %}
+            <div class="cell-sub nowrap">
+              <a class="txt-warn" href="/devices/{{ r.d.id }}/edit"
+                 title="{{ t('tz.drift_hint', tz=tzname) if r.drift else t('tz.fixed_hint') }}">
+                🕒 {% if r.drift %}{{ t('tz.drift', hours='%+.0f'|format(r.drift / 60)) }}
+                   {% else %}{{ t('tz.fixed') }}{% endif %}
+              </a>
+            </div>
+          {% endif %}
+        </td>
+        <td class="nowrap"><a href="http://{{ r.d.ip }}/" target="_blank" rel="noopener">{{ r.d.ip }}</a></td>
+        <td class="nowrap">{{ "WLED" if r.d.type == 1 else "Tasmota" }}</td>
+        <td class="nowrap">
+          <div class="cell-main">
+            {{ r.num }}
+            {% if r.outdated %}<span class="pill pill-warn">{{ t('badge.outdated') }}</span>
+            {% elif r.num %}<span class="pill pill-ok">{{ t('badge.latest') }}</span>{% endif %}
+          </div>
+          {% if r.tag %}<div class="cell-sub">{{ r.tag }}</div>{% endif %}
+        </td>
+        <td>
+          {% if r.d.last_backup %}
+            <div class="cell-main nowrap">{{ fmt_dt(r.d.last_backup, "%d.%m.%Y %H:%M") }}</div>
+          {% else %}
+            <div class="cell-main">{{ t('common.never') }}</div>
+          {% endif %}
+          <div class="cell-sub nowrap">
+            <a href="/devices/{{ r.d.id }}/backups">{{ r.backups }} {{ t('th.backups') }}</a>
+          </div>
+        </td>
+        <td>
+          {% if r.d.type == 0 %}
+          <form method="post" action="/devices/{{ r.d.id }}/toggle-auto-update">
+            <button class="btn {{ 'btn-ok' if r.d.auto_update else '' }}" type="submit">
+              {{ t('common.on') if r.d.auto_update else t('common.off') }}
+            </button>
+          </form>
+          {% else %}<span class="muted">{{ t('common.na') }}</span>{% endif %}
+        </td>
+        <td>
+          <div class="actions">
+            <form method="post" action="/devices/{{ r.d.id }}/backup">
+              <button class="btn btn-ok" type="submit">{{ t('btn.backup') }}</button>
+            </form>
+            {% if r.d.type == 0 %}
+            <form method="post" action="/devices/{{ r.d.id }}/update"
+                  onsubmit="return confirm('{{ t('confirm.update', name=r.d.name) }}');">
+              <button class="btn btn-warn" type="submit">{{ t('btn.update') }}</button>
+            </form>
+            {% endif %}
+            <a class="btn" href="/devices/{{ r.d.id }}/edit">{{ t('btn.edit') }}</a>
+            <form method="post" action="/devices/{{ r.d.id }}/delete"
+                  onsubmit="return confirm('{{ t('confirm.delete', name=r.d.name) }}');">
+              <button class="btn btn-danger" type="submit">{{ t('btn.delete') }}</button>
+            </form>
+          </div>
+        </td>
+      </tr>
+    {% else %}
+      <tr><td colspan="7" class="muted">{{ t('dev.empty') }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

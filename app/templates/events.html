@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}: {{ t('nav.events') }}{% endblock %}
+{% block content %}
+
+<div class="card">
+  <div class="row" style="justify-content:space-between;">
+    <strong>{{ t('events.heading') }}</strong>
+    <form method="post" action="/events/clear"
+          onsubmit="return confirm('{{ t('events.confirm_clear') }}');">
+      <button class="btn btn-danger" type="submit">{{ t('events.clear') }}</button>
+    </form>
+  </div>
+</div>
+
+<div class="card" id="events"
+     hx-get="/events" hx-trigger="every 30s" hx-target="#events" hx-select="#events" hx-swap="outerHTML">
+  <table>
+    <thead>
+      <tr>
+        <th>{{ t('th.time') }}</th>
+        <th>{{ t('th.level') }}</th>
+        <th>{{ t('th.device') }}</th>
+        <th>{{ t('th.message') }}</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for e in events %}
+      <tr>
+        <td class="muted" style="white-space:nowrap;">{{ fmt_dt(e.created_at, "%Y-%m-%d %H:%M:%S") }}</td>
+        <td>
+          {% if e.level == 'error' %}<span class="pill pill-danger">{{ t('level.error') }}</span>
+          {% elif e.level == 'warn' %}<span class="pill pill-warn">{{ t('level.warn') }}</span>
+          {% else %}<span class="pill pill-ok">{{ t('level.info') }}</span>{% endif %}
+        </td>
+        <td>
+          {% if e.device_id %}<a href="/devices/{{ e.device_id }}/backups">{{ e.device_name }}</a>
+          {% else %}<span class="muted">{{ e.device_name or '—' }}</span>{% endif %}
+        </td>
+        <td>{{ e.message }}</td>
+      </tr>
+    {% else %}
+      <tr><td colspan="4" class="muted">{{ t('events.empty') }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<p class="muted">{{ t('events.retention_hint') }}</p>
+{% endblock %}

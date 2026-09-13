@@ -1,0 +1,14 @@
+.git
+.github
+.env
+.env.*
+data/
+.venv/
+.pytest_cache/
+**/__pycache__/
+*.pyc
+*.egg-info/
+tests/
+scripts/
+templates/
+ca_profile.xml

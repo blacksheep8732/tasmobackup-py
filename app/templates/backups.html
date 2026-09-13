@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}: {{ t('backups.title') }}{% endblock %}
+{% block content %}
+<div class="card row" style="justify-content:space-between;">
+  <strong>{{ t('backups.title') }} — {{ device.name if device else "?" }}</strong>
+  <a class="btn" href="/">← {{ t('common.back') }}</a>
+</div>
+<div class="card">
+  <table>
+    <thead><tr><th>{{ t('th.date') }}</th><th>{{ t('th.version') }}</th><th>{{ t('th.size') }}</th><th>{{ t('th.actions') }}</th></tr></thead>
+    <tbody>
+    {% for b in backups %}
+      <tr>
+        <td>{{ fmt_dt(b.created_at, "%Y-%m-%d %H:%M:%S") }}</td>
+        <td>{{ b.version }}</td>
+        <td class="muted">{{ "%.1f KB"|format(b.size / 1024) }}</td>
+        <td class="row">
+          <a class="btn" href="/backups/{{ b.id }}/download">{{ t('btn.download') }}</a>
+          {% if device and device.type == 0 %}
+          <form class="inline" method="post" action="/backups/{{ b.id }}/restore"
+                onsubmit="return confirm('{{ t('confirm.restore', name=device.name) }}');">
+            <button class="btn btn-warn" type="submit">{{ t('btn.restore') }}</button>
+          </form>
+          {% endif %}
+        </td>
+      </tr>
+    {% else %}
+      <tr><td colspan="4" class="muted">{{ t('backups.empty') }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

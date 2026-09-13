@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}: {{ t('edit.title') }}{% endblock %}
+{% block content %}
+<div class="card row" style="justify-content:space-between;">
+  <strong>{{ t('edit.title') }}</strong>
+  <a class="btn" href="/">← {{ t('common.back') }}</a>
+</div>
+<div class="card">
+  <form method="post" action="/devices/{{ device.id }}/edit">
+    <p class="row"><label style="width:220px;">{{ t('th.ip') }}</label>
+      <span class="muted">{{ device.ip }}</span></p>
+    <p class="row"><label style="width:220px;">{{ t('edit.name') }}</label>
+      <input name="name" value="{{ device.name }}" autofocus></p>
+    <p class="row"><label style="width:220px;">{{ t('edit.auto_name') }}</label>
+      <input type="checkbox" name="auto_name" value="1" {{ "checked" if not device.name_custom }}></p>
+    <p class="muted">{{ t('edit.auto_name_hint') }}</p>
+    <button class="btn btn-primary" type="submit">{{ t('btn.save') }}</button>
+  </form>
+</div>
+
+<div class="card">
+  <strong>{{ t('edit.tz_section') }}</strong>
+  <p class="muted">{{ t('edit.tz_hint') }}</p>
+
+  <p class="row"><label style="width:220px;">{{ t('edit.tz_device') }}</label>
+    <span>
+      {% if device.tz_offset is none %}
+        <span class="muted">{{ t('common.unknown') }}</span>
+      {% else %}
+        <strong>UTC{{ '%+d'|format(device.tz_offset // 60) }}</strong>
+        <span class="muted">
+          · {{ t('edit.tz_mode_rules') if device.tz_dst else t('edit.tz_mode_fixed') }}
+        </span>
+      {% endif %}
+    </span></p>
+
+  <p class="row"><label style="width:220px;">{{ t('edit.tz_server') }}</label>
+    <span><strong>{{ tzname }}</strong> <span class="muted">· UTC{{ '%+d'|format(expected_off // 60) }}</span></span></p>
+
+  <p class="row"><label style="width:220px;">{{ t('edit.tz_state') }}</label>
+    <span>
+      {% if device.tz_offset is none %}
+        <span class="muted">{{ t('edit.tz_unknown') }}</span>
+      {% elif drift %}
+        <span class="txt-warn">{{ t('tz.drift', hours='%+.0f'|format(drift / 60)) }}</span>
+      {% elif fixed_tz %}
+        <span class="txt-warn">{{ t('tz.fixed') }}</span>
+      {% else %}
+        <span class="txt-ok">{{ t('edit.tz_ok') }}</span>
+      {% endif %}
+    </span></p>
+
+  <form method="post" action="/devices/{{ device.id }}/sync-time">
+    <button class="btn {{ 'btn-warn' if (drift or fixed_tz) else '' }}" type="submit">
+      {{ t('edit.tz_apply', tz=tzname) }}
+    </button>
+  </form>
+  <p class="muted">{{ t('edit.tz_commands') }} <code>{{ commands|join('; ') }}</code></p>
+</div>
+{% endblock %}
