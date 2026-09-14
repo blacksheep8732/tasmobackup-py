@@ -160,6 +160,12 @@ the trip to ntfy. Delivery failures are logged and never abort a backup run.
 WLED firmware updates are **not** automated (no safe headless OTA path); WLED is
 backup/restore only.
 
+## License
+
+MIT — see [LICENSE](LICENSE). This project is a rewrite of
+[TasmoBackup](https://github.com/danmed/TasmoBackupV1) by danmed, which is also
+released under the MIT License.
+
 ## Project layout
 
 ```
