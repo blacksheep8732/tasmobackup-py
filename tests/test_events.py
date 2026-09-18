@@ -116,7 +116,7 @@ def test_flash_message_survives_redirect(client, device_id):
     # The device IP is unroutable, so the backup fails -> flash + error event.
     r = client.post(f"/devices/{device_id}/backup", follow_redirects=True)
     assert r.status_code == 200
-    assert "backup failed" in r.text
+    assert "Backup fehlgeschlagen" in r.text or "backup failed" in r.text
     assert any(e.level == LEVEL_ERROR for e in events.recent(5))
 
 
@@ -127,10 +127,10 @@ def test_htmx_poll_does_not_swallow_flash(client, device_id):
     # Simulate the dashboard's background poll first...
     poll = client.get("/", headers={"HX-Request": "true"})
     assert poll.status_code == 200
-    assert "backup failed" not in poll.text
+    assert "Backup fehlgeschlagen" not in poll.text
     # ...the message must still be waiting for the real page load.
     full = client.get("/")
-    assert "backup failed" in full.text
+    assert "Backup fehlgeschlagen" in full.text
 
 
 def test_header_safe_survives_umlauts():
@@ -150,7 +150,7 @@ async def test_send_test_reports_failure_instead_of_raising():
     """A dead endpoint must come back as a readable message, not an exception."""
     ok, msg = await events.send_test("http://127.0.0.1:9/nope", "ntfy")
     assert ok is False
-    assert "failed" in msg.lower()
+    assert "failed" in str(msg).lower()
 
     ok, msg = await events.send_test("", "ntfy")
     assert ok is False

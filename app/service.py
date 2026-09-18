@@ -18,6 +18,7 @@ from sqlalchemy import select
 from . import events, github, mqtt, tasmota, tz
 from .config import get_config
 from .db import get_int, get_setting, session_scope
+from .i18n import Msg, msg
 from .models import LEVEL_ERROR, LEVEL_INFO, LEVEL_WARN, TYPE_WLED, Backup, Device
 from .security import decrypt, encrypt
 
@@ -115,15 +116,15 @@ def _mark_reachability(device_id: int, reachable: bool) -> None:
 # --------------------------------------------------------------------------- #
 # Device management
 # --------------------------------------------------------------------------- #
-async def add_device(ip: str, username: str = "", password: str = "") -> str:
+async def add_device(ip: str, username: str = "", password: str = "") -> Msg:
     user = username or _cfg.tasmota_user
     pw = password or _cfg.tasmota_password
     dtype = await tasmota.probe(ip, user, pw)
     if dtype is None:
-        return f"{ip}: no Tasmota/WLED device found."
+        return msg("msg.add_not_found", ip=ip)
     info = await tasmota.get_info(ip, user, pw, dtype)
     if info is None:
-        return f"{ip}: device not responding."
+        return msg("msg.add_no_answer", ip=ip)
 
     with session_scope() as s:
         existing = None
@@ -135,7 +136,7 @@ async def add_device(ip: str, username: str = "", password: str = "") -> str:
             existing.ip, existing.version = ip, info.version
             if info.name and not existing.name_custom:
                 existing.name = info.name
-            return f"{ip}: {info.name} updated."
+            return msg("msg.add_updated", ip=ip, name=info.name or ip)
         s.add(
             Device(
                 name=info.name or ip,
@@ -147,7 +148,7 @@ async def add_device(ip: str, username: str = "", password: str = "") -> str:
                 password_enc=encrypt(pw),
             )
         )
-    return f"{ip}: {info.name or ip} added."
+    return msg("msg.add_added", ip=ip, name=info.name or ip)
 
 
 def _remove_backup_file(filename: str) -> None:
@@ -187,16 +188,26 @@ def delete_device(device_id: int) -> bool:
     return True
 
 
-async def scan_subnet(cidr: str, username: str = "", password: str = "") -> list[str]:
-    """Probe every host in a CIDR range and add the ones that answer."""
+# Largest range a scan may cover. Every silent address waits for the HTTP timeout,
+# so a stray /16 would keep the scan busy for hours.
+MAX_SCAN_HOSTS = 1022  # a /22
+
+
+async def scan_subnet(cidr: str, username: str = "", password: str = "") -> tuple[Msg | None, list[Msg]]:
+    """Probe every host in a CIDR range and add the ones that answer.
+
+    Returns (error, results): error is set when the range itself is unusable.
+    """
     try:
         net = ipaddress.ip_network(cidr, strict=False)
     except ValueError:
-        return [f"invalid subnet: {cidr}"]
+        return msg("msg.scan_invalid", cidr=cidr), []
+    if net.num_addresses - 2 > MAX_SCAN_HOSTS:
+        return msg("msg.scan_too_large", cidr=cidr, max=MAX_SCAN_HOSTS), []
     user = username or _cfg.tasmota_user
     pw = password or _cfg.tasmota_password
     sem = asyncio.Semaphore(_cfg.concurrency)
-    results: list[str] = []
+    results: list[Msg] = []
 
     async def check(ip: str) -> None:
         async with sem:
@@ -204,10 +215,10 @@ async def scan_subnet(cidr: str, username: str = "", password: str = "") -> list
                 results.append(await add_device(ip, user, pw))
 
     await asyncio.gather(*(check(str(h)) for h in net.hosts()))
-    return results
+    return None, results
 
 
-async def mqtt_discover() -> tuple[bool, list[str]]:
+async def mqtt_discover() -> tuple[bool, list[Msg]]:
     """Discover Tasmota devices via MQTT (broker config from settings), then add them.
 
     Returns (ok, messages). ok=False means the broker could not be reached/configured.
@@ -219,14 +230,14 @@ async def mqtt_discover() -> tuple[bool, list[str]]:
         password = decrypt(get_setting(s, "mqtt_password", ""))
         group = get_setting(s, "mqtt_topic", "tasmotas").strip() or "tasmotas"
     if not host:
-        return False, ["MQTT host not configured"]
+        return False, [msg("msg.mqtt_no_host")]
 
     found = await mqtt.discover(host, port, user, password, group)
     if found is None:
-        return False, [f"MQTT connection to {host}:{port} failed"]
+        return False, [msg("msg.mqtt_failed", host=host, port=port)]
 
     # MQTT only gives us the IPs; add over HTTP (reuses probe + metadata + storage).
-    messages: list[str] = []
+    messages: list[Msg] = []
     sem = asyncio.Semaphore(_cfg.concurrency)
 
     async def add(ip: str) -> None:
@@ -235,7 +246,7 @@ async def mqtt_discover() -> tuple[bool, list[str]]:
 
     await asyncio.gather(*(add(d.ip) for d in found if d.ip))
     if not messages:
-        messages.append("No devices answered via MQTT")
+        messages.append(msg("msg.mqtt_none"))
     return True, messages
 
 
@@ -246,7 +257,7 @@ async def backup_device(device_id: int) -> tuple[bool, str]:
     with session_scope() as s:
         device = s.get(Device, device_id)
         if not device:
-            return False, "device not found"
+            return False, msg("msg.device_not_found")
         ip, dtype, name = device.ip, device.type, device.name
         name_custom = device.name_custom
         user, pw = _creds(device)
@@ -275,7 +286,7 @@ async def backup_device(device_id: int) -> tuple[bool, str]:
             # scheduler from re-reporting it every 15 minutes.
             events.record(LEVEL_ERROR, "backup failed — device unreachable",
                           device_id, name, key="unreachable")
-        return False, f"{name}: backup failed (offline?)"
+        return False, msg("msg.backup_failed", name=name)
 
     ext = ".zip" if dtype == TYPE_WLED else ".dmp"
     folder = _cfg.backup_dir / _safe(name)
@@ -310,10 +321,10 @@ async def backup_device(device_id: int) -> tuple[bool, str]:
         )
     _cleanup_backups(device_id)
     events.clear_alert(device_id)
-    return True, f"{name}: backup ok"
+    return True, msg("msg.backup_ok", name=name)
 
 
-async def backup_all() -> tuple[int, list[str]]:
+async def backup_all() -> tuple[int, list[Msg]]:
     """Back up every device in parallel. Returns (device count, failure messages).
 
     Sequentially, each offline device cost two HTTP timeouts before the next one
@@ -322,13 +333,13 @@ async def backup_all() -> tuple[int, list[str]]:
     with session_scope() as s:
         ids = [d.id for d in s.scalars(select(Device)).all()]
     sem = asyncio.Semaphore(_cfg.concurrency)
-    failed: list[str] = []
+    failed: list[Msg] = []
 
     async def one(device_id: int) -> None:
         async with sem:
-            ok, msg = await backup_device(device_id)
+            ok, result = await backup_device(device_id)
             if not ok:
-                failed.append(msg)
+                failed.append(result)
 
     await asyncio.gather(*(one(i) for i in ids))
     return len(ids), failed
@@ -356,20 +367,20 @@ async def restore_device(device_id: int, backup_id: int) -> tuple[bool, str]:
         device = s.get(Device, device_id)
         backup = s.get(Backup, backup_id)
         if not device or not backup:
-            return False, "device or backup not found"
+            return False, msg("msg.restore_not_found")
         if device.type == TYPE_WLED:
-            return False, "restore is only supported for Tasmota devices"
+            return False, msg("msg.restore_tasmota_only")
         ip, name = device.ip, device.name
         user, pw = _creds(device)
         path = Path(backup.filename)
     if not path.exists():
-        return False, "backup file missing"
+        return False, msg("msg.restore_file_missing")
     ok = await tasmota.restore_backup(ip, user, pw, path.read_bytes())
     if not ok:
         events.record(LEVEL_ERROR, "restore failed", device_id, name)
     else:
         events.record(LEVEL_INFO, f"restore from {path.name} ok", device_id, name)
-    return ok, "restore ok" if ok else "restore failed"
+    return ok, msg("msg.restore_ok" if ok else "msg.restore_failed", name=name)
 
 
 # --------------------------------------------------------------------------- #
@@ -411,21 +422,21 @@ async def sync_timezone(device_id: int) -> tuple[bool, str]:
     with session_scope() as s:
         device = s.get(Device, device_id)
         if not device:
-            return False, "device not found"
+            return False, msg("msg.device_not_found")
         if device.type == TYPE_WLED:
-            return False, "time sync is only supported for Tasmota devices"
+            return False, msg("msg.tz_tasmota_only")
         ip, name = device.ip, device.name
         user, pw = _creds(device)
         tzname = get_setting(s, "timezone", "Europe/Berlin")
 
     commands = tz.tasmota_commands(tzname, datetime.utcnow().year)
     if not commands:
-        return False, f"unknown time zone '{tzname}'"
+        return False, msg("msg.tz_unknown", tz=tzname)
 
     if not await tasmota.apply_commands(ip, user, pw, commands):
         events.record(LEVEL_ERROR, f"time sync failed — device did not accept the commands",
                       device_id, name)
-        return False, f"{name}: device did not accept the time settings"
+        return False, msg("msg.tz_rejected", name=name)
 
     # Read back so the dashboard reflects reality rather than our intent.
     #
@@ -449,9 +460,9 @@ async def sync_timezone(device_id: int) -> tuple[bool, str]:
         events.record(LEVEL_WARN,
                       f"time sync applied but device still reports UTC{new_off // 60:+d}",
                       device_id, name)
-        return False, f"{name}: still off after sync"
+        return False, msg("msg.tz_still_off", name=name)
     events.record(LEVEL_INFO, f"time zone set to {tzname}", device_id, name)
-    return True, f"{name}: time zone synced"
+    return True, msg("msg.tz_ok", name=name, tz=tzname)
 
 
 async def refresh_all() -> None:
@@ -566,17 +577,17 @@ async def update_device(device_id: int, force: bool = False) -> tuple[bool, str]
     with session_scope() as s:
         device = s.get(Device, device_id)
         if not device:
-            return False, "device not found"
+            return False, msg("msg.device_not_found")
         if device.type == TYPE_WLED:
-            return False, "auto-update is only supported for Tasmota devices"
+            return False, msg("msg.update_tasmota_only")
         ip, version, name = device.ip, device.version, device.name
 
     # Never replace a custom build on our own; only an explicit (warned) click may.
     if not force and github.is_custom_build(version):
-        return False, f"{name}: custom firmware {version} — auto-update skipped"
+        return False, msg("msg.update_custom_skipped", name=name, version=version)
 
     if not force and not await github.is_outdated(version):
-        return False, f"{name}: already up to date"
+        return False, msg("msg.update_current", name=name)
 
     # A manual click deserves a fresh answer even if the same thing failed before;
     # the scheduler's repeated attempts stay quiet via the alert key below.
@@ -589,24 +600,26 @@ async def update_device(device_id: int, force: bool = False) -> tuple[bool, str]
     image = await _current_ota_image(ip, user, pw)
 
     # SAFETY: a fresh backup must succeed before we flash anything.
-    ok, msg = await backup_device(device_id)
+    ok, result = await backup_device(device_id)
     if not ok:
-        events.record(LEVEL_ERROR, f"update aborted — pre-update backup failed ({msg})",
+        events.record(LEVEL_ERROR, f"update aborted — pre-update backup failed ({result})",
                       device_id, name, key="update_failed")
-        return False, f"{name}: aborted — pre-update backup failed ({msg})"
+        return False, msg("msg.update_backup_failed", name=name, reason=result)
 
     # Trigger only — the device knows its image and drives the rest itself.
     started = await tasmota.upgrade_firmware(ip, user, pw)
     if not started:
         events.record(LEVEL_ERROR, "update failed — device rejected the OTA command",
                       device_id, name, key="update_failed")
-        return False, f"{name}: OTA command failed"
+        return False, msg("msg.update_rejected", name=name)
     _updating.add(device_id)
     with session_scope() as s:
         s.get(Device, device_id).last_update = datetime.utcnow()
     # Refresh the stored version once the device finishes flashing and reboots,
     # so the dashboard doesn't keep showing the old firmware until the next backup.
-    detail = f" using {image.rsplit('/', 1)[-1]}" if image else ""
+    image_name = image.rsplit("/", 1)[-1] if image else ""
+    detail = f" using {image_name}" if image_name else ""
     events.record(LEVEL_INFO, f"update started from {version}{detail}", device_id, name)
     _spawn(_watch_update(device_id, version))
-    return True, f"{name}: update started{detail}"
+    return True, (msg("msg.update_started_image", name=name, image=image_name) if image_name
+                  else msg("msg.update_started", name=name))

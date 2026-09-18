@@ -19,6 +19,7 @@ import httpx
 from sqlalchemy import delete, select
 
 from .db import get_int, get_setting, session_scope
+from .i18n import Msg, msg
 from .models import LEVEL_ERROR, LEVEL_INFO, LEVEL_ORDER, LEVEL_WARN, Device, Event
 
 log = logging.getLogger("tasmobackup.events")
@@ -125,10 +126,10 @@ async def _send(url: str, fmt: str, level: str, message: str, device_name: str) 
         log.warning("notification to %s failed: %s", url, exc)
 
 
-async def send_test(url: str, fmt: str = "ntfy") -> tuple[bool, str]:
+async def send_test(url: str, fmt: str = "ntfy") -> tuple[bool, Msg]:
     """Deliver a test message synchronously so the settings page can report the result."""
     if not url.strip():
-        return False, "no notification URL configured"
+        return False, msg("msg.notify_no_url")
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
             if fmt == "json":
@@ -143,10 +144,10 @@ async def send_test(url: str, fmt: str = "ntfy") -> tuple[bool, str]:
                     headers={"Title": "TasmoBackup", "Priority": "3", "Tags": "white_check_mark"},
                 )
         if r.status_code < 400:
-            return True, f"test notification sent (HTTP {r.status_code})"
-        return False, f"endpoint answered HTTP {r.status_code}"
+            return True, msg("msg.notify_sent", code=r.status_code)
+        return False, msg("msg.notify_http", code=r.status_code)
     except Exception as exc:  # noqa: BLE001 — report the reason instead of a 500 page
-        return False, f"delivery failed: {exc}"
+        return False, msg("msg.notify_failed", error=exc)
 
 
 def clear_alert(device_id: int) -> None:

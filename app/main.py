@@ -18,6 +18,7 @@ from . import events, github, i18n, scheduler, service, tz
 from .config import get_config
 from .db import (INT_SETTINGS, all_settings, get_setting, init_db, parse_int_setting,
                  session_scope, set_setting)
+from .i18n import Msg, msg
 from .models import LEVEL_ERROR, LEVEL_INFO, LEVEL_WARN, Backup, Device
 from .security import decrypt, encrypt, hash_password, verify_password
 
@@ -90,15 +91,28 @@ def _i18n_context(request: Request) -> dict:
     }
 
 
+def _lang() -> str:
+    with session_scope() as s:
+        return get_setting(s, "language", i18n.DEFAULT_LANG)
+
+
 def _tr(key: str, **kwargs: object) -> str:
     """Translate into the UI language currently configured in the settings."""
-    with session_scope() as s:
-        lang = get_setting(s, "language", i18n.DEFAULT_LANG)
-    return i18n.translate(lang, key, **kwargs)
+    return i18n.translate(_lang(), key, **kwargs)
 
 
-def _flash(request: Request, level: str, text: str) -> None:
-    """Queue a one-off message shown on the next full page render."""
+def _join(messages: list[Msg], sep: str = "; ") -> str:
+    lang = _lang()
+    return sep.join(m.text(lang) for m in messages)
+
+
+def _flash(request: Request, level: str, text: str | Msg) -> None:
+    """Queue a one-off message shown on the next full page render.
+
+    Translated here: the session cookie can only hold plain strings.
+    """
+    if isinstance(text, Msg):
+        text = text.text(_lang())
     request.session.setdefault("flash", []).append({"level": level, "text": text})
 
 
@@ -116,7 +130,7 @@ def _tz_state(device: Device, tzname: str) -> tuple[int | None, bool, int | None
     return drift, bool(has_dst and device.tz_dst is False and drift == 0), expected
 
 
-def _flash_result(request: Request, ok: bool, message: str) -> None:
+def _flash_result(request: Request, ok: bool, message: str | Msg) -> None:
     _flash(request, LEVEL_INFO if ok else LEVEL_ERROR, message)
 
 
@@ -182,7 +196,7 @@ async def login(request: Request, username: str = Form(...), password: str = For
         )
     if not ok:
         return templates.TemplateResponse(
-            request, "login.html", {"error": "Invalid credentials"}, status_code=401
+            request, "login.html", {"error": _tr("login.invalid")}, status_code=401
         )
     request.session["user"] = username
     return RedirectResponse("/", status_code=303)
@@ -258,15 +272,16 @@ async def events_page(request: Request):
 @app.post("/events/clear", dependencies=[Depends(require_login)])
 async def events_clear(request: Request):
     events.clear_all()
-    _flash(request, LEVEL_INFO, "event log cleared")
+    _flash(request, LEVEL_INFO, msg("msg.events_cleared"))
     return RedirectResponse("/events", status_code=303)
 
 
 @app.post("/devices/add", dependencies=[Depends(require_login)])
 async def add_device(request: Request, ip: str = Form(...), username: str = Form(""),
                      password: str = Form("")):
-    msg = await service.add_device(ip.strip(), username.strip(), password)
-    _flash(request, LEVEL_INFO if "added" in msg or "updated" in msg else LEVEL_WARN, msg)
+    result = await service.add_device(ip.strip(), username.strip(), password)
+    ok = result.key in ("msg.add_added", "msg.add_updated")
+    _flash(request, LEVEL_INFO if ok else LEVEL_WARN, result)
     return RedirectResponse("/", status_code=303)
 
 
@@ -322,16 +337,16 @@ async def toggle_auto_update(device_id: int):
 
 @app.post("/devices/{device_id}/backup", dependencies=[Depends(require_login)])
 async def backup_now(request: Request, device_id: int):
-    ok, msg = await service.backup_device(device_id)
-    _flash_result(request, ok, msg)
+    ok, result = await service.backup_device(device_id)
+    _flash_result(request, ok, result)
     return RedirectResponse("/", status_code=303)
 
 
 @app.post("/devices/{device_id}/update", dependencies=[Depends(require_login)])
 async def update_now(request: Request, device_id: int):
     # Manual button forces the update (still backs up first inside the service).
-    ok, msg = await service.update_device(device_id, force=True)
-    _flash_result(request, ok, msg)
+    ok, result = await service.update_device(device_id, force=True)
+    _flash_result(request, ok, result)
     return RedirectResponse("/", status_code=303)
 
 
@@ -339,10 +354,10 @@ async def update_now(request: Request, device_id: int):
 async def backup_all(request: Request):
     total, failed = await service.backup_all()
     if failed:
-        _flash(request, LEVEL_ERROR,
-               f"{total - len(failed)}/{total} ok — failed: " + "; ".join(failed))
+        _flash(request, LEVEL_ERROR, msg("msg.backup_all_failed", ok=total - len(failed),
+                                         total=total, failed=_join(failed)))
     else:
-        _flash(request, LEVEL_INFO, f"all {total} backups ok")
+        _flash(request, LEVEL_INFO, msg("msg.backup_all_ok", total=total))
     return RedirectResponse("/", status_code=303)
 
 
@@ -350,15 +365,15 @@ async def backup_all(request: Request):
 async def refresh_one(request: Request, device_id: int):
     ok, _ = await service.refresh_device(device_id)
     _flash(request, LEVEL_INFO if ok else LEVEL_WARN,
-           "status updated" if ok else "device did not answer")
+           msg("msg.refresh_ok" if ok else "msg.refresh_failed"))
     return RedirectResponse("/", status_code=303)
 
 
 @app.post("/devices/{device_id}/sync-time", dependencies=[Depends(require_login)])
 async def sync_time_one(request: Request, device_id: int):
     """Apply the configured time zone to a single device, from its edit page."""
-    ok, msg = await service.sync_timezone(device_id)
-    _flash_result(request, ok, msg)
+    ok, result = await service.sync_timezone(device_id)
+    _flash_result(request, ok, result)
     return RedirectResponse(f"/devices/{device_id}/edit", status_code=303)
 
 
@@ -369,27 +384,30 @@ async def refresh_all(request: Request):
         devices = list(s.scalars(select(Device)).all())
         offline = [d.name for d in devices if not d.online]
     if offline:
-        _flash(request, LEVEL_WARN,
-               f"{len(devices) - len(offline)}/{len(devices)} online — offline: "
-               + ", ".join(offline))
+        _flash(request, LEVEL_WARN, msg("msg.refresh_all_offline", online=len(devices) - len(offline),
+                                        total=len(devices), names=", ".join(offline)))
     else:
-        _flash(request, LEVEL_INFO, f"all {len(devices)} devices online")
+        _flash(request, LEVEL_INFO, msg("msg.refresh_all_ok", total=len(devices)))
     return RedirectResponse("/", status_code=303)
 
 
 @app.post("/scan", dependencies=[Depends(require_login)])
 async def scan(request: Request, subnet_base: str = Form(...), subnet_cidr: str = Form("24")):
     cidr = subnet_cidr.strip().lstrip("/") or "24"
-    results = await service.scan_subnet(f"{subnet_base.strip()}/{cidr}")
-    _flash(request, LEVEL_INFO,
-           f"scan finished: {len(results)} device(s) found" if results else "scan found nothing")
+    error, results = await service.scan_subnet(f"{subnet_base.strip()}/{cidr}")
+    if error:
+        _flash(request, LEVEL_ERROR, error)
+    elif results:
+        _flash(request, LEVEL_INFO, msg("msg.scan_found", count=len(results), details=_join(results)))
+    else:
+        _flash(request, LEVEL_INFO, msg("msg.scan_none"))
     return RedirectResponse("/", status_code=303)
 
 
 @app.post("/mqtt-scan", dependencies=[Depends(require_login)])
 async def mqtt_scan(request: Request):
     ok, messages = await service.mqtt_discover()
-    _flash(request, LEVEL_INFO if ok else LEVEL_ERROR, "; ".join(messages))
+    _flash(request, LEVEL_INFO if ok else LEVEL_ERROR, _join(messages))
     return RedirectResponse("/", status_code=303)
 
 
@@ -426,8 +444,8 @@ async def restore(request: Request, backup_id: int):
         b = s.get(Backup, backup_id)
         device_id = b.device_id if b else None
     if device_id:
-        ok, msg = await service.restore_device(device_id, backup_id)
-        _flash_result(request, ok, msg)
+        ok, result = await service.restore_device(device_id, backup_id)
+        _flash_result(request, ok, result)
     return RedirectResponse(f"/devices/{device_id}/backups", status_code=303)
 
 
@@ -518,10 +536,10 @@ async def save_settings(request: Request):
         with session_scope() as s:
             url = get_setting(s, "notify_url", "")
             fmt = get_setting(s, "notify_format", "ntfy")
-        ok, msg = await events.send_test(url, fmt)
-        _flash_result(request, ok, msg)
+        ok, result = await events.send_test(url, fmt)
+        _flash_result(request, ok, result)
     else:
-        _flash(request, LEVEL_INFO, "settings saved")
+        _flash(request, LEVEL_INFO, msg("msg.settings_saved"))
     return RedirectResponse("/settings", status_code=303)
 
 

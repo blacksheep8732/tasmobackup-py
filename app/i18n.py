@@ -7,6 +7,7 @@ in the language selector automatically.
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
 
@@ -31,6 +32,30 @@ def _packs() -> dict[str, dict[str, str]]:
 def available_languages() -> list[tuple[str, str]]:
     """Return [(code, display_name), ...] for the language selector."""
     return [(code, _LANG_NAMES.get(code, code)) for code in _packs()]
+
+
+@dataclass(frozen=True)
+class Msg:
+    """A user-facing message that is translated when shown, not when created.
+
+    The service layer has no idea which language the UI uses, so it returns a key
+    plus parameters. str() gives English — that is what ends up in the logs — and
+    the web layer calls .text(lang). A parameter may itself be a Msg.
+    """
+
+    key: str
+    params: dict[str, object] = field(default_factory=dict)
+
+    def text(self, lang: str) -> str:
+        params = {k: v.text(lang) if isinstance(v, Msg) else v for k, v in self.params.items()}
+        return translate(lang, self.key, **params)
+
+    def __str__(self) -> str:
+        return self.text("en")
+
+
+def msg(key: str, **params: object) -> Msg:
+    return Msg(key, params)
 
 
 def translate(lang: str, key: str, **kwargs: object) -> str:

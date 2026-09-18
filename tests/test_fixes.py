@@ -114,7 +114,7 @@ async def test_scheduled_update_never_touches_a_custom_build(monkeypatch, device
     monkeypatch.setattr(tasmota, "upgrade_firmware", must_not_run)
     monkeypatch.setattr(tasmota, "get_ota_url", must_not_run)
     ok, msg = await service.update_device(device_id, force=False)
-    assert not ok and "custom" in msg
+    assert not ok and "custom" in str(msg)
 
 
 def test_dashboard_marks_custom_build_instead_of_outdated(client, device_id, monkeypatch):
@@ -359,3 +359,53 @@ async def test_mqtt_discovery_gets_the_decrypted_password(monkeypatch):
         with session_scope() as s:
             set_setting(s, "mqtt_host", "")
             set_setting(s, "mqtt_password", "")
+
+
+# --- Point 10: user-facing messages follow the UI language ----------------------- #
+
+def test_msg_translates_and_stays_english_in_logs():
+    from app.i18n import msg
+
+    m = msg("msg.update_backup_failed", name="Dach", reason=msg("msg.backup_failed", name="Dach"))
+    assert m.text("de") == "Dach: Update abgebrochen — Backup vorher fehlgeschlagen (Dach: Backup fehlgeschlagen (offline?))"
+    assert str(m) == "Dach: aborted — pre-update backup failed (Dach: backup failed (offline?))"
+
+
+def test_every_message_key_exists_in_all_languages():
+    import json
+    import re
+    from pathlib import Path
+
+    app_dir = Path(__file__).parent.parent / "app"
+    used = set()
+    for f in app_dir.glob("*.py"):
+        used |= set(re.findall(r'"(msg\.[a-z_]+)"', f.read_text()))
+    assert len(used) > 30
+    for pack in (app_dir / "locales").glob("*.json"):
+        missing = used - set(json.loads(pack.read_text(encoding="utf-8")))
+        assert not missing, f"{pack.name} lacks {sorted(missing)}"
+
+
+def test_flash_follows_the_ui_language(client, device_id):
+    from app.db import set_setting
+
+    # unroutable IP -> fails; the redirect target shows (and consumes) the message
+    r = client.post(f"/devices/{device_id}/backup", follow_redirects=True)
+    assert "Backup fehlgeschlagen" in r.text
+    with session_scope() as s:
+        set_setting(s, "language", "en")
+    try:
+        r = client.post(f"/devices/{device_id}/backup", follow_redirects=True)
+        assert "backup failed (offline?)" in r.text
+    finally:
+        with session_scope() as s:
+            set_setting(s, "language", "de")
+
+
+def test_scan_reports_bad_or_huge_subnets_as_errors(client):
+    page = client.post("/scan", data={"subnet_base": "999.1.1.1", "subnet_cidr": "24"},
+                       follow_redirects=True).text
+    assert "Ungültiges Netz" in page and "gefunden:" not in page
+    page = client.post("/scan", data={"subnet_base": "10.0.0.0", "subnet_cidr": "16"},
+                       follow_redirects=True).text
+    assert "zu groß" in page
