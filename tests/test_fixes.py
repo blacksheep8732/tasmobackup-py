@@ -613,3 +613,66 @@ async def test_rejected_notification_is_logged(monkeypatch, caplog):
 def test_settings_offer_gotify(client):
     page = client.get("/settings").text
     assert 'value="gotify"' in page and "ntfy / Gotify" not in page
+
+
+# --- 0.3.0 (3): credentials of an existing device can be changed ----------------- #
+
+def _pw_enc(device_id):
+    with session_scope() as s:
+        return s.get(Device, device_id).password_enc
+
+
+def test_edit_page_changes_credentials(client, device_id, monkeypatch):
+    from app import service
+    from app.security import decrypt
+
+    tried = []
+
+    async def fake_refresh(did):
+        tried.append(did)
+        return True, "15.6.0(release-tasmota)"
+
+    monkeypatch.setattr(service, "refresh_device", fake_refresh)
+    form = {"name": "Testgerät", "auto_name": "1", "username": "admin"}
+
+    r = client.post(f"/devices/{device_id}/edit", data={**form, "password": "neu-geheim"},
+                    follow_redirects=True)
+    assert decrypt(_pw_enc(device_id)) == "neu-geheim"
+    assert tried == [device_id] and "das Gerät antwortet" in r.text
+    assert "neu-geheim" not in client.get(f"/devices/{device_id}/edit").text
+
+    client.post(f"/devices/{device_id}/edit", data=form)                      # blank keeps
+    assert decrypt(_pw_enc(device_id)) == "neu-geheim"
+    assert len(tried) == 1, "nothing changed, so the device must not be queried"
+
+    client.post(f"/devices/{device_id}/edit", data={**form, "password_clear": "1"})
+    assert _pw_enc(device_id) == ""
+
+    client.post(f"/devices/{device_id}/edit", data={**form, "username": "bob"})
+    with session_scope() as s:
+        assert s.get(Device, device_id).username == "bob"
+
+
+async def test_re_adding_with_explicit_credentials_updates_them(monkeypatch, device_id):
+    from app import service, tasmota
+    from app.security import decrypt
+    from app.tasmota import DeviceInfo
+
+    with session_scope() as s:
+        mac = s.get(Device, device_id).mac
+
+    async def probe(*a, **k):
+        return 0
+
+    async def info(*a, **k):
+        return DeviceInfo(name="Testgerät", version="15.6.0(release-tasmota)", mac=mac)
+
+    monkeypatch.setattr(tasmota, "probe", probe)
+    monkeypatch.setattr(tasmota, "get_info", info)
+    await service.add_device("10.0.0.1")                        # defaults: no change
+    assert _pw_enc(device_id) == ""
+    result = await service.add_device("10.0.0.1", "carl", "pw2")
+    assert result.key == "msg.add_updated"
+    with session_scope() as s:
+        d = s.get(Device, device_id)
+        assert d.username == "carl" and decrypt(d.password_enc) == "pw2"

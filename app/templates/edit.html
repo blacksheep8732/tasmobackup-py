@@ -14,6 +14,19 @@
     <p class="row"><label style="width:220px;">{{ t('edit.auto_name') }}</label>
       <input type="checkbox" name="auto_name" value="1" {{ "checked" if not device.name_custom }}></p>
     <p class="muted">{{ t('edit.auto_name_hint') }}</p>
+
+    <p style="margin-top:1.4rem;"><strong>{{ t('edit.credentials') }}</strong></p>
+    <p class="muted">{{ t('edit.credentials_hint') }}</p>
+    <p class="row"><label style="width:220px;">{{ t('edit.user') }}</label>
+      <input name="username" value="{{ device.username }}" autocomplete="off"></p>
+    <p class="row"><label style="width:220px;">{{ t('edit.password') }}</label>
+      {# The stored password is never sent back to the browser. #}
+      <input name="password" type="password" autocomplete="new-password"
+             placeholder="{{ t('edit.password_ph_set') if device.password_enc else t('edit.password_ph_default') }}">
+      {% if device.password_enc %}
+      <label class="muted"><input type="checkbox" name="password_clear" value="1">
+        {{ t('edit.password_clear') }}</label>
+      {% endif %}</p>
     <button class="btn btn-primary" type="submit">{{ t('btn.save') }}</button>
   </form>
 </div>

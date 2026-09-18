@@ -315,15 +315,35 @@ async def edit_form(request: Request, device_id: int):
 
 
 @app.post("/devices/{device_id}/edit", dependencies=[Depends(require_login)])
-async def edit_device(device_id: int, name: str = Form(""), auto_name: str = Form("")):
+async def edit_device(request: Request, device_id: int, name: str = Form(""),
+                      auto_name: str = Form(""), username: str | None = Form(None),
+                      password: str = Form(""), password_clear: str = Form("")):
+    creds_changed = False
     with session_scope() as s:
         device = s.get(Device, device_id)
-        if device:
-            new_name = name.strip()
-            if new_name:
-                device.name = new_name
-            # Checkbox present -> keep syncing name from device; absent -> name is custom.
-            device.name_custom = not bool(auto_name)
+        if not device:
+            return RedirectResponse("/", status_code=303)
+        new_name = name.strip()
+        if new_name:
+            device.name = new_name
+        # Checkbox present -> keep syncing name from device; absent -> name is custom.
+        device.name_custom = not bool(auto_name)
+        # Credentials: empty user = default user; the password field stays empty in the
+        # page, so empty keeps the stored one and the checkbox falls back to the default.
+        if username is not None and username.strip() != device.username:
+            device.username = username.strip()
+            creds_changed = True
+        if password_clear:
+            device.password_enc = ""
+            creds_changed = True
+        elif password:
+            device.password_enc = encrypt(password)
+            creds_changed = True
+    if creds_changed:
+        # Try them right away, so a typo shows up now and not at the next backup.
+        ok, _ = await service.refresh_device(device_id)
+        _flash(request, LEVEL_INFO if ok else LEVEL_WARN,
+               msg("msg.creds_ok" if ok else "msg.creds_failed"))
     return RedirectResponse("/", status_code=303)
 
 

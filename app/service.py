@@ -136,6 +136,11 @@ async def add_device(ip: str, username: str = "", password: str = "") -> Msg:
             existing.ip, existing.version = ip, info.version
             if info.name and not existing.name_custom:
                 existing.name = info.name
+            # Credentials typed in explicitly replace the stored ones (defaults don't).
+            if username:
+                existing.username = username
+            if password:
+                existing.password_enc = encrypt(password)
             return msg("msg.add_updated", ip=ip, name=info.name or ip)
         s.add(
             Device(
