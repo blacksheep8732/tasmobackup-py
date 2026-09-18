@@ -84,7 +84,8 @@
         <td class="nowrap">
           <div class="cell-main">
             {{ r.num }}
-            {% if r.outdated %}<span class="pill pill-warn">{{ t('badge.outdated') }}</span>
+            {% if r.custom %}<span class="pill" title="{{ t('badge.custom_hint') }}">{{ t('badge.custom') }}</span>
+            {% elif r.outdated %}<span class="pill pill-warn">{{ t('badge.outdated') }}</span>
             {% elif r.num %}<span class="pill pill-ok">{{ t('badge.latest') }}</span>{% endif %}
           </div>
           {% if r.tag %}<div class="cell-sub">{{ r.tag }}</div>{% endif %}
@@ -100,7 +101,9 @@
           </div>
         </td>
         <td>
-          {% if r.d.type == 0 %}
+          {% if r.custom %}
+          <span class="muted" title="{{ t('badge.custom_hint') }}">{{ t('autoupdate.custom') }}</span>
+          {% elif r.d.type == 0 %}
           <form method="post" action="/devices/{{ r.d.id }}/toggle-auto-update">
             <button class="btn {{ 'btn-ok' if r.d.auto_update else '' }}" type="submit">
               {{ t('common.on') if r.d.auto_update else t('common.off') }}
@@ -117,7 +120,7 @@
             {# tojson + single-quoted attribute: a name like "Oma's Lampe" must neither
                break the dialog (the form would submit unconfirmed) nor inject script. #}
             <form method="post" action="/devices/{{ r.d.id }}/update"
-                  onsubmit='return confirm({{ t("confirm.update", name=r.d.name)|tojson }});'>
+                  onsubmit='return confirm({{ t("confirm.update_custom" if r.custom else "confirm.update", name=r.d.name, version=r.d.version)|tojson }});'>
               <button class="btn btn-warn" type="submit">{{ t('btn.update') }}</button>
             </form>
             {% endif %}

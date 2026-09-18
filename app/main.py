@@ -198,7 +198,11 @@ async def index(request: Request):
         rows = []
         for d in devices:
             num, tag = github.parse_version(d.version)
-            outdated = bool(num and latest and github._semver(num) < github._semver(latest))
+            custom = github.is_custom_build(d.version)
+            # A custom build is not "behind" the official release — it is a different
+            # thing, and flagging it would invite a click that replaces it.
+            outdated = bool(not custom and num and latest
+                            and github._semver(num) < github._semver(latest))
             drift, fixed_tz, _ = _tz_state(d, tzname)
             rows.append(
                 {
@@ -206,6 +210,7 @@ async def index(request: Request):
                     "num": num,
                     "tag": tag,
                     "outdated": outdated,
+                    "custom": custom,
                     "backups": counts[d.id],
                     "drift": drift,
                     "fixed_tz": fixed_tz,

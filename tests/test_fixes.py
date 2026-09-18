@@ -83,3 +83,52 @@ async def test_scheduler_keeps_going_after_one_device_fails(monkeypatch):
         with session_scope() as s:
             for i in ids:
                 s.delete(s.get(Device, i))
+
+
+# --- Point 3: custom firmware is never auto-updated ------------------------------ #
+
+def test_custom_build_detection():
+    from app.github import is_custom_build
+
+    assert not is_custom_build("15.6.0(release-tasmota)")
+    assert not is_custom_build("15.6.0(release-tasmota32)")
+    assert not is_custom_build("15.6.0")              # no tag: nothing to go on
+    assert is_custom_build("15.6.0(gas)")
+    assert is_custom_build("15.1.0.1(ee1d867-scripting)")
+    assert is_custom_build("15.6.0(tasmota)")         # self-compiled default name
+
+
+async def test_scheduled_update_never_touches_a_custom_build(monkeypatch, device_id):
+    from app import github, service, tasmota
+
+    with session_scope() as s:
+        s.get(Device, device_id).version = "15.6.0(gas)"
+
+    async def must_not_run(*a, **k):
+        raise AssertionError("device was contacted for a custom build")
+
+    async def newer(*a, **k):
+        return "99.0.0"
+
+    monkeypatch.setattr(github, "latest_version", newer)
+    monkeypatch.setattr(tasmota, "upgrade_firmware", must_not_run)
+    monkeypatch.setattr(tasmota, "get_ota_url", must_not_run)
+    ok, msg = await service.update_device(device_id, force=False)
+    assert not ok and "custom" in msg
+
+
+def test_dashboard_marks_custom_build_instead_of_outdated(client, device_id, monkeypatch):
+    from app import github
+
+    async def newer():
+        return "99.0.0"
+
+    monkeypatch.setattr(github, "latest_version", newer)
+    with session_scope() as s:
+        d = s.get(Device, device_id)
+        d.version, d.name = "15.6.0(gas)", "Gaszähler-Test"
+    page = client.get("/").text
+    row = page[page.index("Gaszähler-Test"):].split("</tr>")[0]
+    assert "eigene Firmware" in row or "custom build" in row
+    assert "veraltet" not in row and "outdated" not in row
+    assert "ACHTUNG" in html.unescape(row) or "WARNING" in html.unescape(row)

@@ -53,6 +53,18 @@ def parse_version(version: str) -> tuple[str, str]:
     return version.strip(), ""
 
 
+def is_custom_build(version: str) -> bool:
+    """True for firmware that did not come from an official Tasmota release.
+
+    Official release images report their build as '(release-<variant>)'. Anything
+    else with a build tag — '(gas)', '(ee1d867-scripting)', a self-compiled
+    '(tasmota)' — is someone's own build. An OTA 'update' would replace it with the
+    official image and lose whatever made it special, so it is never auto-updated.
+    """
+    _, tag = parse_version(version)
+    return bool(tag) and not tag.startswith("(release-")
+
+
 async def latest_version() -> str:
     rel = await latest_release()
     if not rel:

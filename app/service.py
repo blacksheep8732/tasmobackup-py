@@ -497,6 +497,10 @@ async def update_device(device_id: int, force: bool = False) -> tuple[bool, str]
             return False, "auto-update is only supported for Tasmota devices"
         ip, version, name = device.ip, device.version, device.name
 
+    # Never replace a custom build on our own; only an explicit (warned) click may.
+    if not force and github.is_custom_build(version):
+        return False, f"{name}: custom firmware {version} — auto-update skipped"
+
     if not force and not await github.is_outdated(version):
         return False, f"{name}: already up to date"
 
