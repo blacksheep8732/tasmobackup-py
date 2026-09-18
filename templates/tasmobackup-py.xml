@@ -21,6 +21,12 @@ Login-protected, device passwords encrypted at rest, no tracking. German and Eng
   <ExtraSearchTerms>tasmota wled sonoff esp8266 esp32 backup firmware ota tasmobackup</ExtraSearchTerms>
   <Requires>Tasmota/WLED devices reachable over HTTP from the Unraid server.</Requires>
   <Changes>
+### 0.3.0 (2026-09-19)
+- A web page is never stored as a backup (Tasmota in WebServer 1 mode answered with its start page)
+- New Gotify notification format; rejected notifications are logged
+- Credentials of existing devices can be changed on the edit page (tested right away)
+- Version shown in the header; docker-compose uses the published image
+- Documentation: bilingual wiki (German/English)
 ### 0.2.0 (2026-09-19)
 - Custom firmware builds (not release-...) are never auto-updated; the update button warns
 - Failed restores are detected (Tasmota answers HTTP 200 either way)
