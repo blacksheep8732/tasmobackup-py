@@ -15,11 +15,12 @@ from typing import Any
 
 import httpx
 
+from . import __version__
 from .config import get_config
 from .models import TYPE_TASMOTA, TYPE_WLED
 
 _cfg = get_config()
-USER_AGENT = "TasmoBackup-py/0.1"
+USER_AGENT = f"TasmoBackup-py/{__version__}"
 
 
 @dataclass

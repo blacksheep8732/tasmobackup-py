@@ -13,6 +13,7 @@ from typing import Any
 
 import httpx
 
+from . import __version__
 from .config import get_config
 
 _cfg = get_config()
@@ -42,7 +43,7 @@ async def latest_release() -> dict[str, Any] | None:
     if time.time() - _last_failure < _RETRY_AFTER:
         return _read_cache()  # stale is better than waiting on a network that's down
     try:
-        async with httpx.AsyncClient(timeout=15.0, headers={"User-Agent": "TasmoBackup-py"}) as c:
+        async with httpx.AsyncClient(timeout=15.0, headers={"User-Agent": f"TasmoBackup-py/{__version__}"}) as c:
             r = await c.get(_RELEASES_URL)
             if r.status_code != 200:
                 raise httpx.HTTPError("bad status")

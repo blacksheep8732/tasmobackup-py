@@ -1,8 +1,4 @@
 """Tests for the online-status tracking, event log and notification plumbing."""
-import uuid
-
-import pytest
-
 from app import events, service, tasmota
 from app.db import session_scope, set_setting
 from app.models import LEVEL_ERROR, LEVEL_INFO, LEVEL_WARN, Device

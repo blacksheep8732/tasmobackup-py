@@ -501,3 +501,13 @@ async def test_update_watcher_stops_when_the_device_is_deleted(monkeypatch):
     monkeypatch.setattr(events, "record", lambda *a, **k: recorded.append(a))
     await service._watch_update(did, "15.5.0(release-tasmota)", delay=0, interval=0, attempts=5)
     assert recorded == [], "no 'update problem' event for a device that no longer exists"
+
+
+def test_version_matches_pyproject():
+    import tomllib
+    from pathlib import Path
+
+    from app import __version__
+
+    pyproject = tomllib.loads((Path(__file__).parent.parent / "pyproject.toml").read_text())
+    assert pyproject["project"]["version"] == __version__

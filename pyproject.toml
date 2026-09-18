@@ -1,6 +1,6 @@
 [project]
 name = "tasmobackup-py"
-version = "0.1.0"
+version = "0.2.0"
 description = "Backup and (opt-in) auto-update for Tasmota/WLED devices — a modern Python rewrite of TasmoBackup"
 requires-python = ">=3.11"
 # Upper bounds stop the image build from silently picking up a new major version

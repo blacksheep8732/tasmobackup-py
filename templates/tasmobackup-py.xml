@@ -21,11 +21,19 @@ Login-protected, device passwords encrypted at rest, no tracking. German and Eng
   <ExtraSearchTerms>tasmota wled sonoff esp8266 esp32 backup firmware ota tasmobackup</ExtraSearchTerms>
   <Requires>Tasmota/WLED devices reachable over HTTP from the Unraid server.</Requires>
   <Changes>
-### 2026-09-14
+### 0.2.0 (2026-09-19)
+- Custom firmware builds (not release-...) are never auto-updated; the update button warns
+- Failed restores are detected (Tasmota answers HTTP 200 either way)
+- Invalid settings are refused instead of silently stopping all backups
+- Deleting a device also deletes its backups
+- "Back up all" runs in parallel; same-named devices no longer overwrite each other
+- MQTT password stored encrypted; messages translated; confirm dialogs safe with quotes in names
+- Dependency versions capped at the next major release
+### 0.1.0 (2026-09-14)
 - Initial Community Applications release
 - PUID/PGID support, secret key generated automatically on first start
   </Changes>
-  <Date>2026-09-14</Date>
+  <Date>2026-09-19</Date>
   <MinVer>6.12</MinVer>
   <License>MIT</License>
 

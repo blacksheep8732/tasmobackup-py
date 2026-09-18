@@ -15,16 +15,18 @@ credentials, a login wall, and a real (safe) firmware-update flow.
 ## Features
 
 - Scheduled + on-demand backups (Tasmota `.dmp`, WLED `cfg.json`+`presets.json` zip)
-- Restore a Tasmota backup with one click
+- Restore a Tasmota backup with one click — a rejected upload is reported as failed
+  (Tasmota answers HTTP 200 either way, so the response itself is checked)
 - **Online status per device** with a periodic reachability check and "last seen" age
 - **Event log + notifications**: failed backups, aborted or stuck updates and devices
   going offline are recorded and pushed to ntfy/Gotify or a JSON webhook
-- Add devices manually, scan an IP subnet, or **discover via MQTT** (parallel async)
+- Add devices manually, scan an IP subnet (up to a /22), or **discover via MQTT**
+  (parallel async); deleting a device also deletes its backups
 - German/English UI with a simple JSON language-pack system (`app/locales/`)
 - Firmware version check against the latest GitHub release
 - **Opt-in firmware auto-update**: per-device toggle + global master switch; a fresh
   backup is **always** taken immediately before flashing, and aborts if it fails
-- Login-protected web UI, encrypted device passwords, no tracking
+- Login-protected web UI, encrypted device and MQTT passwords, no tracking
 - SQLite by default (MySQL/Postgres via `TB_DATABASE_URL`)
 
 ## Unraid
@@ -156,6 +158,11 @@ the trip to ntfy. Delivery failures are logged and never abort a backup run.
    specific state instead of claiming the old version is unchanged.
 5. Scheduled updates only fire for genuinely outdated devices; the manual "Update"
    button forces it (still backing up first).
+6. **Custom builds are never auto-updated.** Only images that report their build as
+   `(release-…)` are official releases. Anything else — a scripting build such as
+   `15.6.0(gas)`, a self-compiled `(tasmota)` — is shown as *custom build* instead of
+   *outdated*, skipped by the scheduler, and the manual button asks with an explicit
+   warning, because an OTA would replace it with the official image.
 
 WLED firmware updates are **not** automated (no safe headless OTA path); WLED is
 backup/restore only.
