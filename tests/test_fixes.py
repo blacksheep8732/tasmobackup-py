@@ -253,3 +253,46 @@ async def test_backup_with_slash_in_version_succeeds(monkeypatch, device_id):
     ok, msg = await service.backup_device(device_id)
     assert ok, msg
     service.delete_device(device_id)
+
+
+# --- Point 8: a rejected restore is reported as failed --------------------------- #
+# Response bodies follow HandleUploadDone() in Tasmota 15.6.0 (xdrv_01_9_webserver.ino).
+_U2_OK = ("<script>setTimeout(function(){location.href='.';},15000);</script>"
+          "<div style='text-align:center;'><b>Upload <font color='#008000'>Erfolgreich</font></b>")
+_U2_FAIL = ("<div style='text-align:center;'><b>Upload <font color='#ff5661'>Fehlgeschlagen</font>"
+            "</b><br><br>Ungültige Datei-Signatur")
+
+
+def _fake_device(monkeypatch, rs_status: int, u2_body: str):
+    import httpx
+
+    from app import tasmota
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/rs":
+            return httpx.Response(rs_status, text="restore page")
+        return httpx.Response(200, text=u2_body)
+
+    monkeypatch.setattr(tasmota, "_client",
+                        lambda ip: httpx.AsyncClient(transport=httpx.MockTransport(handler)))
+
+
+async def test_restore_success_is_recognised(monkeypatch):
+    from app import tasmota
+
+    _fake_device(monkeypatch, 200, _U2_OK)
+    assert await tasmota.restore_backup("10.0.0.9", "admin", "", b"cfg") is True
+
+
+async def test_restore_failure_page_is_not_success(monkeypatch):
+    from app import tasmota
+
+    _fake_device(monkeypatch, 200, _U2_FAIL)  # HTTP 200, but the upload failed
+    assert await tasmota.restore_backup("10.0.0.9", "admin", "", b"cfg") is False
+
+
+async def test_restore_not_armed_is_not_success(monkeypatch):
+    from app import tasmota
+
+    _fake_device(monkeypatch, 401, _U2_OK)  # /u2 would claim success for nothing
+    assert await tasmota.restore_backup("10.0.0.9", "admin", "", b"cfg") is False

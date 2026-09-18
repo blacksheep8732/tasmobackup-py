@@ -190,12 +190,22 @@ async def download_backup(ip: str, user: str, password: str, dtype: int = TYPE_T
         return buf.getvalue()
 
 
+# Only a successful upload makes Tasmota's /u2 page reload itself (it restarts).
+# The status is 200 either way and the "Successful"/"Failed" words are translated
+# (tasmota-DE says "Erfolgreich"), so this script is the language-independent tell.
+# See HandleUploadDone() in xdrv_01_9_webserver.ino.
+_UPLOAD_OK_MARKER = "setTimeout("
+
+
 async def restore_backup(ip: str, user: str, password: str, data: bytes) -> bool:
     """Upload a .dmp config back to a Tasmota device (/rs then /u2)."""
     async with _client(ip) as c:
         try:
-            # Arm the upload type as a settings restore.
-            await c.get(f"http://{ip}/rs", auth=(user, password))
+            # Arm the upload type as a settings restore. If this fails, /u2 ignores
+            # the file but still reports success — so it must be checked.
+            armed = await c.get(f"http://{ip}/rs", auth=(user, password))
+            if armed.status_code != 200:
+                return False
             r = await c.post(
                 f"http://{ip}/u2",
                 auth=(user, password),
@@ -203,7 +213,7 @@ async def restore_backup(ip: str, user: str, password: str, data: bytes) -> bool
             )
         except httpx.HTTPError:
             return False
-        return r.status_code == 200
+        return r.status_code == 200 and _UPLOAD_OK_MARKER in r.text
 
 
 async def get_ota_url(ip: str, user: str, password: str) -> str:
