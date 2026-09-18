@@ -253,7 +253,7 @@ async def mqtt_discover() -> tuple[bool, list[Msg]]:
 # --------------------------------------------------------------------------- #
 # Backups
 # --------------------------------------------------------------------------- #
-async def backup_device(device_id: int) -> tuple[bool, str]:
+async def backup_device(device_id: int) -> tuple[bool, Msg]:
     with session_scope() as s:
         device = s.get(Device, device_id)
         if not device:
@@ -275,7 +275,8 @@ async def backup_device(device_id: int) -> tuple[bool, str]:
     data = await tasmota.download_backup(ip, user, pw, dtype)
     if not data:
         with session_scope() as s:
-            reachable = s.get(Device, device_id).online
+            current = s.get(Device, device_id)
+            reachable = bool(current and current.online)
         if reachable:
             # Answers our status query but won't hand over its config — a real fault
             # worth its own alert.
@@ -304,6 +305,9 @@ async def backup_device(device_id: int) -> tuple[bool, str]:
 
     with session_scope() as s:
         device = s.get(Device, device_id)
+        if device is None:  # deleted while we were downloading
+            path.unlink(missing_ok=True)
+            return False, msg("msg.device_not_found")
         device.version = version or device.version
         if info and info.name and not device.name_custom:
             device.name = info.name
@@ -362,7 +366,7 @@ def _cleanup_backups(device_id: int) -> None:
             s.delete(b)
 
 
-async def restore_device(device_id: int, backup_id: int) -> tuple[bool, str]:
+async def restore_device(device_id: int, backup_id: int) -> tuple[bool, Msg]:
     with session_scope() as s:
         device = s.get(Device, device_id)
         backup = s.get(Backup, backup_id)
@@ -412,7 +416,7 @@ async def refresh_device(device_id: int) -> tuple[bool, str]:
     return True, info.version
 
 
-async def sync_timezone(device_id: int) -> tuple[bool, str]:
+async def sync_timezone(device_id: int) -> tuple[bool, Msg]:
     """Push the app's time zone onto one device (Timezone/TimeStd/TimeDst).
 
     Devices left on a fixed offset ignore the DST rules they carry and run an hour
@@ -434,7 +438,7 @@ async def sync_timezone(device_id: int) -> tuple[bool, str]:
         return False, msg("msg.tz_unknown", tz=tzname)
 
     if not await tasmota.apply_commands(ip, user, pw, commands):
-        events.record(LEVEL_ERROR, f"time sync failed — device did not accept the commands",
+        events.record(LEVEL_ERROR, "time sync failed — device did not accept the commands",
                       device_id, name)
         return False, msg("msg.tz_rejected", name=name)
 
@@ -502,6 +506,10 @@ async def _watch_update(device_id: int, old_version: str, *, delay: float = 90.0
     current = old_version
 
     for _ in range(attempts):
+        with session_scope() as s:
+            if s.get(Device, device_id) is None:
+                _updating.discard(device_id)
+                return  # device was deleted meanwhile — nothing left to watch
         ok, version = await refresh_device(device_id)
         if ok and version:
             current = version
@@ -518,6 +526,8 @@ async def _watch_update(device_id: int, old_version: str, *, delay: float = 90.0
                     nudged = True
                     with session_scope() as s:
                         d = s.get(Device, device_id)
+                        if d is None:
+                            return
                         ip = d.ip
                         user, pw = _creds(d)
                     started = await tasmota.upgrade_firmware(ip, user, pw)
@@ -569,7 +579,7 @@ async def _current_ota_image(ip: str, user: str, pw: str) -> str:
     return await tasmota.get_ota_url(ip, user, pw)
 
 
-async def update_device(device_id: int, force: bool = False) -> tuple[bool, str]:
+async def update_device(device_id: int, force: bool = False) -> tuple[bool, Msg]:
     """Update a single device's firmware. ALWAYS backs up first.
 
     `force` skips the outdated-check (manual button). The scheduler never forces.

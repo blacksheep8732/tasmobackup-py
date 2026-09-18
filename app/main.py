@@ -19,7 +19,7 @@ from .config import get_config
 from .db import (INT_SETTINGS, all_settings, get_setting, init_db, parse_int_setting,
                  session_scope, set_setting)
 from .i18n import Msg, msg
-from .models import LEVEL_ERROR, LEVEL_INFO, LEVEL_WARN, Backup, Device, utcnow
+from .models import LEVEL_ERROR, LEVEL_INFO, LEVEL_WARN, TYPE_TASMOTA, Backup, Device, utcnow
 from .security import decrypt, encrypt, hash_password, verify_password
 
 cfg = get_config()
@@ -101,9 +101,15 @@ def _tr(key: str, **kwargs: object) -> str:
     return i18n.translate(_lang(), key, **kwargs)
 
 
+# Flash messages travel in the signed session cookie, which browsers drop above
+# ~4 KB — a scan that finds dozens of devices must not produce a longer text.
+_MAX_DETAILS = 600
+
+
 def _join(messages: list[Msg], sep: str = "; ") -> str:
     lang = _lang()
-    return sep.join(m.text(lang) for m in messages)
+    text = sep.join(m.text(lang) for m in messages)
+    return text if len(text) <= _MAX_DETAILS else text[:_MAX_DETAILS].rstrip() + " …"
 
 
 def _flash(request: Request, level: str, text: str | Msg) -> None:
@@ -228,7 +234,8 @@ async def index(request: Request):
             custom = github.is_custom_build(d.version)
             # A custom build is not "behind" the official release — it is a different
             # thing, and flagging it would invite a click that replaces it.
-            outdated = bool(not custom and num and latest
+            # `latest` is the newest *Tasmota* release; a WLED version is unrelated.
+            outdated = bool(d.type == TYPE_TASMOTA and not custom and num and latest
                             and github._semver(num) < github._semver(latest))
             drift, fixed_tz, _ = _tz_state(d, tzname)
             rows.append(
@@ -443,9 +450,11 @@ async def restore(request: Request, backup_id: int):
     with session_scope() as s:
         b = s.get(Backup, backup_id)
         device_id = b.device_id if b else None
-    if device_id:
-        ok, result = await service.restore_device(device_id, backup_id)
-        _flash_result(request, ok, result)
+    if not device_id:  # backup vanished (e.g. pruned) — nothing to go back to
+        _flash(request, LEVEL_ERROR, msg("msg.restore_not_found"))
+        return RedirectResponse("/", status_code=303)
+    ok, result = await service.restore_device(device_id, backup_id)
+    _flash_result(request, ok, result)
     return RedirectResponse(f"/devices/{device_id}/backups", status_code=303)
 
 

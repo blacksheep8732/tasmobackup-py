@@ -421,3 +421,83 @@ async def test_restore_failure_on_esp32_is_not_success(monkeypatch):
     assert await tasmota.restore_backup("10.0.0.9", "admin", "", b"cfg") is False
     _fake_device(monkeypatch, 200, esp32_header + _U2_OK)
     assert await tasmota.restore_backup("10.0.0.9", "admin", "", b"cfg") is True
+
+
+# --- Final re-check ---------------------------------------------------------------- #
+
+def test_wled_is_never_compared_with_the_tasmota_release(client, monkeypatch):
+    from app import github
+    from app.models import TYPE_WLED
+
+    async def newer():
+        return "15.6.0"
+
+    monkeypatch.setattr(github, "latest_version", newer)
+    with session_scope() as s:
+        d = Device(name="WLED-Streifen", ip="10.6.0.1", mac="FF0000000001",
+                   type=TYPE_WLED, version="0.15.0")
+        s.add(d)
+        s.flush()
+        did = d.id
+    try:
+        page = client.get("/").text
+        row = page[page.index("WLED-Streifen"):].split("</tr>")[0]
+        assert "veraltet" not in row and "outdated" not in row
+    finally:
+        with session_scope() as s:
+            s.delete(s.get(Device, did))
+
+
+async def test_device_deleted_during_backup_leaves_no_file(monkeypatch):
+    from app import service, tasmota
+    from app.config import get_config
+    from app.tasmota import DeviceInfo
+
+    with session_scope() as s:
+        d = Device(name="Fluechtig", ip="10.5.0.1", mac="FE0000000001")
+        s.add(d)
+        s.flush()
+        did = d.id
+
+    async def info(*a, **k):
+        return DeviceInfo(name="Fluechtig", version="15.6.0(release-tasmota)", mac="")
+
+    async def dump_then_vanish(*a, **k):
+        with session_scope() as s:           # the user deletes it mid-download
+            s.delete(s.get(Device, did))
+        return b"cfg"
+
+    monkeypatch.setattr(tasmota, "get_info", info)
+    monkeypatch.setattr(tasmota, "download_backup", dump_then_vanish)
+    ok, _ = await service.backup_device(did)
+    assert not ok
+    folder = get_config().backup_dir / "Fluechtig"
+    assert not folder.exists() or not any(folder.iterdir()), "orphan backup file left behind"
+
+
+def test_long_flash_details_are_capped():
+    from app.i18n import msg
+    from app.main import _MAX_DETAILS, _join
+
+    text = _join([msg("msg.add_added", ip=f"10.0.{i}.1", name="Geraet-mit-langem-Namen") for i in range(200)])
+    assert len(text) <= _MAX_DETAILS + 2 and text.endswith("…")
+
+
+def test_restoring_a_vanished_backup_goes_home(client):
+    r = client.post("/backups/999999/restore", follow_redirects=False)
+    assert r.status_code == 303 and r.headers["location"] == "/"
+
+
+async def test_update_watcher_stops_when_the_device_is_deleted(monkeypatch):
+    from app import events, service
+
+    with session_scope() as s:
+        d = Device(name="Weg", ip="10.4.0.1", mac="FD0000000001")
+        s.add(d)
+        s.flush()
+        did = d.id
+    service.delete_device(did)
+    recorded = []
+    monkeypatch.setattr(events, "record", lambda *a, **k: recorded.append(a))
+    await service._watch_update(did, "15.5.0(release-tasmota)", delay=0, interval=0, attempts=5)
+    assert recorded == [], "no 'update problem' event for a device that no longer exists"
