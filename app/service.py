@@ -39,6 +39,15 @@ def _safe(name: str) -> str:
     return re.sub(r"[^A-Za-z0-9_\-]", "", name) or "device"
 
 
+def _safe_version(version: str) -> str:
+    """Version string as reported by the device, made safe for a file name.
+
+    Keeps the readable form ('15.6.0(release-tasmota)'); anything else — a '/'
+    would point into a non-existent sub-folder and fail the backup — becomes '_'.
+    """
+    return re.sub(r"[^A-Za-z0-9._()\-]", "_", version.strip())[:64]
+
+
 def _local_now() -> datetime:
     """Current time in the configured display timezone (for backup filenames)."""
     with session_scope() as s:
@@ -272,7 +281,7 @@ async def backup_device(device_id: int) -> tuple[bool, str]:
     folder = _cfg.backup_dir / _safe(name)
     folder.mkdir(parents=True, exist_ok=True)
     stamp = _local_now().strftime("%Y-%m-%d_%H-%M-%S")
-    base = f"{_safe(name)}-{stamp}-v{version}"
+    base = f"{_safe(name)}-{stamp}-v{_safe_version(version)}"
     path = folder / f"{base}{ext}"
     # Two devices with the same name share a folder; backed up in the same second
     # (backup_all runs them in parallel) the second would overwrite the first.

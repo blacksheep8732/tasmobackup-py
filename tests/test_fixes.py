@@ -225,3 +225,31 @@ async def test_backup_all_is_parallel_and_same_names_do_not_collide(monkeypatch)
     finally:
         for i in ids:
             service.delete_device(i)
+
+
+# --- Point 7: the version string cannot break the backup file name --------------- #
+
+def test_version_is_made_safe_for_file_names():
+    from app.service import _safe_version
+
+    assert _safe_version("15.6.0(release-tasmota)") == "15.6.0(release-tasmota)"
+    assert _safe_version("15.1.0.1(ee1d867-scripting)") == "15.1.0.1(ee1d867-scripting)"
+    assert "/" not in _safe_version("1.0/../../etc") and "\\" not in _safe_version("a\\b")
+    assert len(_safe_version("9" * 500)) == 64
+
+
+async def test_backup_with_slash_in_version_succeeds(monkeypatch, device_id):
+    from app import service, tasmota
+    from app.tasmota import DeviceInfo
+
+    async def info(*a, **k):
+        return DeviceInfo(name="Slash", version="1.0/evil", mac="")
+
+    async def dump(*a, **k):
+        return b"cfg"
+
+    monkeypatch.setattr(tasmota, "get_info", info)
+    monkeypatch.setattr(tasmota, "download_backup", dump)
+    ok, msg = await service.backup_device(device_id)
+    assert ok, msg
+    service.delete_device(device_id)
