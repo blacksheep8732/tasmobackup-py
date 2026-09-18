@@ -114,14 +114,16 @@
               <button class="btn btn-ok" type="submit">{{ t('btn.backup') }}</button>
             </form>
             {% if r.d.type == 0 %}
+            {# tojson + single-quoted attribute: a name like "Oma's Lampe" must neither
+               break the dialog (the form would submit unconfirmed) nor inject script. #}
             <form method="post" action="/devices/{{ r.d.id }}/update"
-                  onsubmit="return confirm('{{ t('confirm.update', name=r.d.name) }}');">
+                  onsubmit='return confirm({{ t("confirm.update", name=r.d.name)|tojson }});'>
               <button class="btn btn-warn" type="submit">{{ t('btn.update') }}</button>
             </form>
             {% endif %}
             <a class="btn" href="/devices/{{ r.d.id }}/edit">{{ t('btn.edit') }}</a>
             <form method="post" action="/devices/{{ r.d.id }}/delete"
-                  onsubmit="return confirm('{{ t('confirm.delete', name=r.d.name) }}');">
+                  onsubmit='return confirm({{ t("confirm.delete", name=r.d.name)|tojson }});'>
               <button class="btn btn-danger" type="submit">{{ t('btn.delete') }}</button>
             </form>
           </div>

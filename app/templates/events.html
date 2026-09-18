@@ -6,7 +6,7 @@
   <div class="row" style="justify-content:space-between;">
     <strong>{{ t('events.heading') }}</strong>
     <form method="post" action="/events/clear"
-          onsubmit="return confirm('{{ t('events.confirm_clear') }}');">
+          onsubmit='return confirm({{ t("events.confirm_clear")|tojson }});'>
       <button class="btn btn-danger" type="submit">{{ t('events.clear') }}</button>
     </form>
   </div>

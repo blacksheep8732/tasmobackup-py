@@ -18,7 +18,7 @@
           <a class="btn" href="/backups/{{ b.id }}/download">{{ t('btn.download') }}</a>
           {% if device and device.type == 0 %}
           <form class="inline" method="post" action="/backups/{{ b.id }}/restore"
-                onsubmit="return confirm('{{ t('confirm.restore', name=device.name) }}');">
+                onsubmit='return confirm({{ t("confirm.restore", name=device.name)|tojson }});'>
             <button class="btn btn-warn" type="submit">{{ t('btn.restore') }}</button>
           </form>
           {% endif %}
