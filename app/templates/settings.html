@@ -76,7 +76,12 @@
     <p class="row"><label style="width:240px;">{{ t('settings.mqtt_user') }}</label>
       <input name="mqtt_user" value="{{ settings.mqtt_user }}"></p>
     <p class="row"><label style="width:240px;">{{ t('settings.mqtt_password') }}</label>
-      <input name="mqtt_password" type="password" value="{{ settings.mqtt_password }}"></p>
+      <input name="mqtt_password" type="password" autocomplete="new-password"
+             placeholder="{{ t('settings.mqtt_password_ph') if settings.mqtt_password_set else '' }}">
+      {% if settings.mqtt_password_set %}
+      <label class="muted"><input type="checkbox" name="mqtt_password_clear" value="1">
+        {{ t('settings.mqtt_password_clear') }}</label>
+      {% endif %}</p>
     <p class="row"><label style="width:240px;">{{ t('settings.mqtt_topic') }}</label>
       <input name="mqtt_topic" value="{{ settings.mqtt_topic }}" placeholder="tasmotas"></p>
     <p class="row"><label style="width:240px;">{{ t('settings.mqtt_autoscan') }}</label>

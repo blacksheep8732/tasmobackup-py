@@ -216,7 +216,7 @@ async def mqtt_discover() -> tuple[bool, list[str]]:
         host = get_setting(s, "mqtt_host", "").strip()
         port = get_int(s, "mqtt_port")
         user = get_setting(s, "mqtt_user", "")
-        password = get_setting(s, "mqtt_password", "")
+        password = decrypt(get_setting(s, "mqtt_password", ""))
         group = get_setting(s, "mqtt_topic", "tasmotas").strip() or "tasmotas"
     if not host:
         return False, ["MQTT host not configured"]

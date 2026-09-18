@@ -296,3 +296,66 @@ async def test_restore_not_armed_is_not_success(monkeypatch):
 
     _fake_device(monkeypatch, 401, _U2_OK)  # /u2 would claim success for nothing
     assert await tasmota.restore_backup("10.0.0.9", "admin", "", b"cfg") is False
+
+
+# --- Point 9: the MQTT password is stored encrypted and never sent to the browser - #
+
+def _mqtt_pw_raw() -> str:
+    from app.db import get_setting
+
+    with session_scope() as s:
+        return get_setting(s, "mqtt_password", "")
+
+
+def test_mqtt_password_encrypted_hidden_kept_and_clearable(client):
+    from app.security import decrypt
+
+    client.post("/settings", data={"mqtt_password": "geheim123"})
+    raw = _mqtt_pw_raw()
+    assert raw != "geheim123" and decrypt(raw) == "geheim123"
+    assert "geheim123" not in client.get("/settings").text
+
+    client.post("/settings", data={"mqtt_password": ""})          # blank keeps it
+    assert decrypt(_mqtt_pw_raw()) == "geheim123"
+
+    client.post("/settings", data={"mqtt_password_clear": "1"})   # checkbox clears it
+    assert _mqtt_pw_raw() == ""
+
+
+def test_legacy_plaintext_mqtt_password_is_migrated_once():
+    from app.db import set_setting
+    from app.main import _encrypt_legacy_mqtt_password
+    from app.security import decrypt
+
+    with session_scope() as s:
+        set_setting(s, "mqtt_password", "altes-pw")
+    _encrypt_legacy_mqtt_password()
+    first = _mqtt_pw_raw()
+    _encrypt_legacy_mqtt_password()                 # a second start changes nothing
+    assert _mqtt_pw_raw() == first and decrypt(first) == "altes-pw"
+    with session_scope() as s:
+        set_setting(s, "mqtt_password", "")
+
+
+async def test_mqtt_discovery_gets_the_decrypted_password(monkeypatch):
+    from app import mqtt, service
+    from app.db import set_setting
+    from app.security import encrypt
+
+    seen = {}
+
+    async def fake_discover(host, port, user, password, group):
+        seen["password"] = password
+        return []
+
+    monkeypatch.setattr(mqtt, "discover", fake_discover)
+    with session_scope() as s:
+        set_setting(s, "mqtt_host", "10.0.0.2")
+        set_setting(s, "mqtt_password", encrypt("broker-pw"))
+    try:
+        await service.mqtt_discover()
+        assert seen["password"] == "broker-pw"
+    finally:
+        with session_scope() as s:
+            set_setting(s, "mqtt_host", "")
+            set_setting(s, "mqtt_password", "")

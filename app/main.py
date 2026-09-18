@@ -19,7 +19,7 @@ from .config import get_config
 from .db import (INT_SETTINGS, all_settings, get_setting, init_db, parse_int_setting,
                  session_scope, set_setting)
 from .models import LEVEL_ERROR, LEVEL_INFO, LEVEL_WARN, Backup, Device
-from .security import hash_password, verify_password
+from .security import decrypt, encrypt, hash_password, verify_password
 
 cfg = get_config()
 BASE_DIR = Path(__file__).parent
@@ -127,6 +127,7 @@ templates = Jinja2Templates(directory=str(BASE_DIR / "templates"), context_proce
 async def lifespan(app: FastAPI):
     init_db()
     _ensure_admin()
+    _encrypt_legacy_mqtt_password()
     scheduler.start()
     yield
     scheduler.shutdown()
@@ -144,6 +145,18 @@ def _ensure_admin() -> None:
         if not get_setting(s, "admin_password_hash"):
             set_setting(s, "admin_user", cfg.admin_user)
             set_setting(s, "admin_password_hash", hash_password(cfg.admin_password))
+
+
+def _encrypt_legacy_mqtt_password() -> None:
+    """Older versions stored the MQTT password in plain text — encrypt it once.
+
+    decrypt() yields "" for anything that is not a token of ours, which is exactly
+    the case for a plain-text value.
+    """
+    with session_scope() as s:
+        raw = get_setting(s, "mqtt_password", "")
+        if raw and not decrypt(raw):
+            set_setting(s, "mqtt_password", encrypt(raw))
 
 
 # --------------------------------------------------------------------------- #
@@ -426,6 +439,8 @@ async def settings_form(request: Request):
     with session_scope() as s:
         data = all_settings(s)
     data.pop("admin_password_hash", None)
+    # Only whether one is saved — the password itself never goes into the page.
+    data["mqtt_password_set"] = bool(data.pop("mqtt_password", ""))
     return templates.TemplateResponse(
         request,
         "settings.html",
@@ -462,7 +477,6 @@ async def save_settings(request: Request):
             "mqtt_host",
             "mqtt_port",
             "mqtt_user",
-            "mqtt_password",
             "mqtt_topic",
             "mqtt_autoscan",
             "theme",
@@ -484,6 +498,12 @@ async def save_settings(request: Request):
             set_setting(s, key, value)
         if form.get("new_password"):
             set_setting(s, "admin_password_hash", hash_password(str(form["new_password"])))
+        # Stored encrypted and never sent back to the browser: an empty field keeps
+        # the saved password, the checkbox removes it.
+        if form.get("mqtt_password_clear"):
+            set_setting(s, "mqtt_password", "")
+        elif form.get("mqtt_password"):
+            set_setting(s, "mqtt_password", encrypt(str(form["mqtt_password"])))
 
     # The reachability job's interval lives in the DB, so re-install it here instead
     # of making the user restart the container.

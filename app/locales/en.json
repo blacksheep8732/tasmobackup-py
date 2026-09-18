@@ -70,6 +70,8 @@
   "settings.mqtt_port": "Broker port",
   "settings.mqtt_user": "Username",
   "settings.mqtt_password": "Password",
+  "settings.mqtt_password_ph": "saved — leave blank to keep",
+  "settings.mqtt_password_clear": "Clear password",
   "settings.mqtt_topic": "Group topic",
   "settings.mqtt_autoscan": "Auto-scan before scheduled backup",
   "settings.appearance": "Appearance & Security",
