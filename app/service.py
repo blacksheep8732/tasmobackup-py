@@ -19,7 +19,7 @@ from . import events, github, mqtt, tasmota, tz
 from .config import get_config
 from .db import get_int, get_setting, session_scope
 from .i18n import Msg, msg
-from .models import LEVEL_ERROR, LEVEL_INFO, LEVEL_WARN, TYPE_WLED, Backup, Device
+from .models import LEVEL_ERROR, LEVEL_INFO, LEVEL_WARN, TYPE_WLED, Backup, Device, utcnow
 from .security import decrypt, encrypt
 
 _cfg = get_config()
@@ -90,7 +90,7 @@ def _mark_reachability(device_id: int, reachable: bool) -> None:
         first_contact = device.last_seen is None
         if reachable:
             device.online = True
-            device.last_seen = datetime.utcnow()
+            device.last_seen = utcnow()
             device.fail_count = 0
             # Don't announce "back online" for a device we are seeing for the first
             # time (fresh install or right after the schema migration).
@@ -309,7 +309,7 @@ async def backup_device(device_id: int) -> tuple[bool, str]:
             device.name = info.name
         if info and info.mac:
             device.mac = info.mac
-        device.last_backup = datetime.utcnow()
+        device.last_backup = utcnow()
         s.add(
             Backup(
                 device_id=device_id,
@@ -355,7 +355,7 @@ def _cleanup_backups(device_id: int) -> None:
         if max_count > 0:
             to_delete += backups[max_count:]
         if max_days > 0:
-            cutoff = datetime.utcnow() - timedelta(days=max_days)
+            cutoff = utcnow() - timedelta(days=max_days)
             to_delete += [b for b in backups if b.created_at < cutoff]
         for b in set(to_delete):
             _remove_backup_file(b.filename)
@@ -429,7 +429,7 @@ async def sync_timezone(device_id: int) -> tuple[bool, str]:
         user, pw = _creds(device)
         tzname = get_setting(s, "timezone", "Europe/Berlin")
 
-    commands = tz.tasmota_commands(tzname, datetime.utcnow().year)
+    commands = tz.tasmota_commands(tzname, utcnow().year)
     if not commands:
         return False, msg("msg.tz_unknown", tz=tzname)
 
@@ -614,7 +614,7 @@ async def update_device(device_id: int, force: bool = False) -> tuple[bool, str]
         return False, msg("msg.update_rejected", name=name)
     _updating.add(device_id)
     with session_scope() as s:
-        s.get(Device, device_id).last_update = datetime.utcnow()
+        s.get(Device, device_id).last_update = utcnow()
     # Refresh the stored version once the device finishes flashing and reboots,
     # so the dashboard doesn't keep showing the old firmware until the next backup.
     image_name = image.rsplit("/", 1)[-1] if image else ""

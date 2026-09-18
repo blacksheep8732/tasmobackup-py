@@ -9,13 +9,13 @@ ENV PYTHONUNBUFFERED=1 \
 
 WORKDIR /app
 
-# Install dependencies first for better layer caching.
+# Install dependencies first for better layer caching. The list is read from
+# pyproject.toml so the image and the tests use the same version ranges.
 COPY pyproject.toml ./
-RUN pip install --no-cache-dir \
-        "fastapi>=0.115" "uvicorn[standard]>=0.32" "sqlalchemy>=2.0" \
-        "pydantic>=2.9" "pydantic-settings>=2.6" "httpx>=0.27" \
-        "apscheduler>=3.10" "jinja2>=3.1" "python-multipart>=0.0.12" \
-        "itsdangerous>=2.2" "cryptography>=43.0" "bcrypt>=4.2" "aiomqtt>=2.3" "tzdata>=2024.1"
+RUN python -c "import tomllib; print('\n'.join(tomllib.load(open('pyproject.toml', 'rb'))['project']['dependencies']))" \
+        > /tmp/requirements.txt \
+ && pip install --no-cache-dir -r /tmp/requirements.txt \
+ && rm /tmp/requirements.txt
 
 COPY app ./app
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh

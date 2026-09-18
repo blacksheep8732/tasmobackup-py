@@ -19,7 +19,7 @@ from .config import get_config
 from .db import (INT_SETTINGS, all_settings, get_setting, init_db, parse_int_setting,
                  session_scope, set_setting)
 from .i18n import Msg, msg
-from .models import LEVEL_ERROR, LEVEL_INFO, LEVEL_WARN, Backup, Device
+from .models import LEVEL_ERROR, LEVEL_INFO, LEVEL_WARN, Backup, Device, utcnow
 from .security import decrypt, encrypt, hash_password, verify_password
 
 cfg = get_config()
@@ -60,7 +60,7 @@ def _i18n_context(request: Request) -> dict:
         """Compact relative age ("3 min", "2 h", "5 d") for the last-seen column."""
         if dt is None:
             return ""
-        seconds = int((datetime.utcnow() - dt).total_seconds())
+        seconds = int((utcnow() - dt).total_seconds())
         if seconds < 60:
             return i18n.translate(lang, "time.now")
         if seconds < 3600:

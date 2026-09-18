@@ -1,7 +1,7 @@
 """SQLAlchemy ORM models."""
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import Boolean, DateTime, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
@@ -9,6 +9,14 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 class Base(DeclarativeBase):
     pass
+
+
+def utcnow() -> datetime:
+    """Current UTC time without tzinfo — the form all timestamps are stored in.
+
+    Replaces datetime.utcnow(), which Python 3.12+ deprecates.
+    """
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 # Device types
@@ -49,7 +57,7 @@ class Device(Base):
     fail_count: Mapped[int] = mapped_column(Integer, default=0)
     last_backup: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     last_update: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
 class Backup(Base):
@@ -61,7 +69,7 @@ class Backup(Base):
     version: Mapped[str] = mapped_column(String(64), default="")
     filename: Mapped[str] = mapped_column(Text)
     size: Mapped[int] = mapped_column(Integer, default=0)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
 
 
 # Event levels, ordered by severity so notifications can filter on a threshold.
@@ -87,7 +95,7 @@ class Event(Base):
     message: Mapped[str] = mapped_column(Text, default="")
     # False until the user opens the events page; drives the dashboard warning banner.
     seen: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
 
 
 class Setting(Base):

@@ -13,14 +13,14 @@ from __future__ import annotations
 import asyncio
 import base64
 import logging
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 import httpx
 from sqlalchemy import delete, select
 
 from .db import get_int, get_setting, session_scope
 from .i18n import Msg, msg
-from .models import LEVEL_ERROR, LEVEL_INFO, LEVEL_ORDER, LEVEL_WARN, Device, Event
+from .models import LEVEL_ERROR, LEVEL_INFO, LEVEL_ORDER, LEVEL_WARN, Device, Event, utcnow
 
 log = logging.getLogger("tasmobackup.events")
 
@@ -107,7 +107,7 @@ async def _send(url: str, fmt: str, level: str, message: str, device_name: str) 
                         "level": level,
                         "device": device_name,
                         "message": message,
-                        "time": datetime.utcnow().isoformat() + "Z",
+                        "time": utcnow().isoformat() + "Z",
                     },
                 )
             else:
@@ -135,7 +135,7 @@ async def send_test(url: str, fmt: str = "ntfy") -> tuple[bool, Msg]:
             if fmt == "json":
                 r = await client.post(
                     url, json={"level": LEVEL_INFO, "device": "", "message": "TasmoBackup test",
-                               "time": datetime.utcnow().isoformat() + "Z"}
+                               "time": utcnow().isoformat() + "Z"}
                 )
             else:
                 r = await client.post(
@@ -182,7 +182,7 @@ def prune() -> None:
         days = get_int(s, "events_max_days")
         if days <= 0:
             return
-        cutoff = datetime.utcnow() - timedelta(days=days)
+        cutoff = utcnow() - timedelta(days=days)
         s.execute(delete(Event).where(Event.created_at < cutoff))
 
 

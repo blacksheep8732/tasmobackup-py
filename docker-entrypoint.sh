@@ -8,8 +8,9 @@ PGID="${PGID:-1000}"
 
 if [ "$(id -u)" = "0" ]; then
     mkdir -p "$TB_DATA_DIR"
-    # Only chown when the owner differs — avoids walking a large backup tree on every start.
-    if [ "$(stat -c %u:%g "$TB_DATA_DIR")" != "$PUID:$PGID" ]; then
+    # Only chown when something is owned by someone else (e.g. files copied in as
+    # root) — find stops at the first hit, so a correct tree costs one quick walk.
+    if [ -n "$(find "$TB_DATA_DIR" \( ! -user "$PUID" -o ! -group "$PGID" \) -print -quit)" ]; then
         echo "Setting owner of $TB_DATA_DIR to $PUID:$PGID"
         chown -R "$PUID:$PGID" "$TB_DATA_DIR"
     fi

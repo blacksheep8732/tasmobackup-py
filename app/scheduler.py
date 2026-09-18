@@ -13,7 +13,7 @@ from sqlalchemy import select
 
 from . import events, service
 from .db import get_int, get_setting, session_scope
-from .models import Device
+from .models import Device, utcnow
 
 log = logging.getLogger("tasmobackup.scheduler")
 scheduler = AsyncIOScheduler()
@@ -25,7 +25,7 @@ async def run_scheduled_backups() -> None:
         interval = get_int(s, "backup_interval_hours")
         auto_global = get_setting(s, "auto_update_global", "N") == "Y"
         mqtt_autoscan = get_setting(s, "mqtt_autoscan", "N") == "Y"
-        cutoff = datetime.utcnow() - timedelta(hours=interval)
+        cutoff = utcnow() - timedelta(hours=interval)
 
     # Optionally discover new devices via MQTT before backing up.
     if mqtt_autoscan:

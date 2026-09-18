@@ -2,7 +2,8 @@
 
 Consolidates everything the original PHP did across many near-identical curl blocks
 (status 0/2/5, scan, /dl backup, /u2 restore) into one small, typed module, plus the
-firmware-update flow (OtaUrl + Upgrade) the original never implemented.
+firmware-update trigger the original never implemented (`Upgrade 1` only — the
+device's own OtaUrl is read for information but never written).
 """
 from __future__ import annotations
 
