@@ -324,18 +324,12 @@ async def update_now(request: Request, device_id: int):
 
 @app.post("/backup-all", dependencies=[Depends(require_login)])
 async def backup_all(request: Request):
-    with session_scope() as s:
-        ids = [d.id for d in s.scalars(select(Device)).all()]
-    failed = []
-    for did in ids:
-        ok, msg = await service.backup_device(did)
-        if not ok:
-            failed.append(msg)
+    total, failed = await service.backup_all()
     if failed:
         _flash(request, LEVEL_ERROR,
-               f"{len(ids) - len(failed)}/{len(ids)} ok — failed: " + "; ".join(failed))
+               f"{total - len(failed)}/{total} ok — failed: " + "; ".join(failed))
     else:
-        _flash(request, LEVEL_INFO, f"all {len(ids)} backups ok")
+        _flash(request, LEVEL_INFO, f"all {total} backups ok")
     return RedirectResponse("/", status_code=303)
 
 

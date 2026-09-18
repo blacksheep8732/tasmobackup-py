@@ -272,7 +272,14 @@ async def backup_device(device_id: int) -> tuple[bool, str]:
     folder = _cfg.backup_dir / _safe(name)
     folder.mkdir(parents=True, exist_ok=True)
     stamp = _local_now().strftime("%Y-%m-%d_%H-%M-%S")
-    path = folder / f"{_safe(name)}-{stamp}-v{version}{ext}"
+    base = f"{_safe(name)}-{stamp}-v{version}"
+    path = folder / f"{base}{ext}"
+    # Two devices with the same name share a folder; backed up in the same second
+    # (backup_all runs them in parallel) the second would overwrite the first.
+    n = 2
+    while path.exists():
+        path = folder / f"{base}-{n}{ext}"
+        n += 1
     path.write_bytes(data)
 
     with session_scope() as s:
@@ -295,6 +302,27 @@ async def backup_device(device_id: int) -> tuple[bool, str]:
     _cleanup_backups(device_id)
     events.clear_alert(device_id)
     return True, f"{name}: backup ok"
+
+
+async def backup_all() -> tuple[int, list[str]]:
+    """Back up every device in parallel. Returns (device count, failure messages).
+
+    Sequentially, each offline device cost two HTTP timeouts before the next one
+    started, so the button could take minutes.
+    """
+    with session_scope() as s:
+        ids = [d.id for d in s.scalars(select(Device)).all()]
+    sem = asyncio.Semaphore(_cfg.concurrency)
+    failed: list[str] = []
+
+    async def one(device_id: int) -> None:
+        async with sem:
+            ok, msg = await backup_device(device_id)
+            if not ok:
+                failed.append(msg)
+
+    await asyncio.gather(*(one(i) for i in ids))
+    return len(ids), failed
 
 
 def _cleanup_backups(device_id: int) -> None:

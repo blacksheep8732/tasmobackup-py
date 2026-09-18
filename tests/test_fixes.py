@@ -184,3 +184,44 @@ async def test_github_failure_pauses_retries(monkeypatch, tmp_path):
     assert await github.latest_release() is None
     assert await github.latest_release() is None
     assert attempts == 1, "the second call must not hit the network again"
+
+
+# --- Point 6: "back up all" runs in parallel, same-named devices don't collide --- #
+
+async def test_backup_all_is_parallel_and_same_names_do_not_collide(monkeypatch):
+    import asyncio
+    import time
+
+    from app import service, tasmota
+    from app.tasmota import DeviceInfo
+
+    async def slow_info(ip, *a, **k):
+        await asyncio.sleep(0.3)
+        return DeviceInfo(name="Zwilling", version="15.6.0(release-tasmota)", mac="")
+
+    async def slow_dump(ip, *a, **k):
+        return f"config of {ip}".encode()
+
+    monkeypatch.setattr(tasmota, "get_info", slow_info)
+    monkeypatch.setattr(tasmota, "download_backup", slow_dump)
+
+    with session_scope() as s:
+        made = [Device(name="Zwilling", ip=f"10.7.0.{i}", mac=f"EE00000000{i:02d}") for i in range(5)]
+        s.add_all(made)
+        s.flush()
+        ids = [d.id for d in made]
+    try:
+        start = time.monotonic()
+        total, failed = await service.backup_all()
+        elapsed = time.monotonic() - start
+        assert not failed and total >= 5
+        assert elapsed < 1.0, f"took {elapsed:.2f}s — looks sequential"
+        with session_scope() as s:
+            files = [b.filename for b in s.query(Backup).filter(Backup.device_id.in_(ids))]
+        assert len(files) == 5 and len(set(files)) == 5, "a same-named backup was overwritten"
+        from pathlib import Path
+        contents = {Path(f).read_bytes() for f in files}
+        assert len(contents) == 5
+    finally:
+        for i in ids:
+            service.delete_device(i)
