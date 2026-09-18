@@ -511,3 +511,75 @@ def test_version_matches_pyproject():
 
     pyproject = tomllib.loads((Path(__file__).parent.parent / "pyproject.toml").read_text())
     assert pyproject["project"]["version"] == __version__
+
+
+# --- 0.3.0 (1): a web page is never stored as a backup --------------------------- #
+
+def _fake_http(monkeypatch, routes: dict):
+    """routes: path -> (status, content-type, body)."""
+    import httpx
+
+    from app import tasmota
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        status, ctype, body = routes.get(request.url.path, (404, "text/plain", b""))
+        return httpx.Response(status, headers={"content-type": ctype}, content=body)
+
+    monkeypatch.setattr(tasmota, "_client",
+                        lambda ip: httpx.AsyncClient(transport=httpx.MockTransport(handler)))
+
+
+_START_PAGE = b"<!DOCTYPE html><html><head><title>Tasmota</title></head><body>Main Menu</body></html>"
+
+
+async def test_tasmota_start_page_is_not_a_backup(monkeypatch):
+    from app import tasmota
+
+    # WebServer 1: /dl answers with the start page and HTTP 200
+    _fake_http(monkeypatch, {"/dl": (200, "text/html", _START_PAGE)})
+    assert await tasmota.download_backup("10.0.0.9", "admin", "") is None
+    # same without a content type
+    _fake_http(monkeypatch, {"/dl": (200, "", b"  " + _START_PAGE)})
+    assert await tasmota.download_backup("10.0.0.9", "admin", "") is None
+    # a real config
+    _fake_http(monkeypatch, {"/dl": (200, "application/octet-stream", b"\x5a\x00\x01binary-config")})
+    assert await tasmota.download_backup("10.0.0.9", "admin", "") == b"\x5a\x00\x01binary-config"
+
+
+async def test_wled_backup_requires_json(monkeypatch):
+    from app import tasmota
+    from app.models import TYPE_WLED
+
+    ok = {"/cfg.json": (200, "application/json", b'{"id":{"name":"WLED"}}'),
+          "/presets.json": (200, "application/json", b"{}")}
+    _fake_http(monkeypatch, ok)
+    assert await tasmota.download_backup("10.0.0.9", "", "", TYPE_WLED) is not None
+    _fake_http(monkeypatch, {**ok, "/cfg.json": (200, "text/html", b"<html>locked</html>")})
+    assert await tasmota.download_backup("10.0.0.9", "", "", TYPE_WLED) is None
+
+
+async def test_start_page_backup_fails_and_writes_no_file(monkeypatch, device_id):
+    from app import service, tasmota
+    from app.config import get_config
+    from app.tasmota import DeviceInfo
+
+    async def info(*a, **k):
+        return DeviceInfo(name="WebserverEins", version="15.6.0(release-tasmota)", mac="")
+
+    monkeypatch.setattr(tasmota, "get_info", info)
+    _fake_http(monkeypatch, {"/dl": (200, "text/html", _START_PAGE)})
+    ok, _ = await service.backup_device(device_id)
+    assert not ok
+    folder = get_config().backup_dir / "WebserverEins"
+    assert not folder.exists() or not any(folder.iterdir())
+
+
+async def test_binary_config_starting_like_markup_is_kept(monkeypatch):
+    """A .dmp is binary; its first byte may be anything, including '<' or a tab."""
+    from app import tasmota
+
+    for body in (b"<\x12\x5c\x4d binary", b"\x09\x12\x5c\x4d binary"):
+        _fake_http(monkeypatch, {"/dl": (200, "application/octet-stream", body)})
+        assert await tasmota.download_backup("10.0.0.9", "admin", "") == body
+    _fake_http(monkeypatch, {"/dl": (200, "", b"\x09\x12\x5c\x4d binary")})   # no type at all
+    assert await tasmota.download_backup("10.0.0.9", "admin", "") == b"\x09\x12\x5c\x4d binary"

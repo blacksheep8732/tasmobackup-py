@@ -8,6 +8,7 @@ device's own OtaUrl is read for information but never written).
 from __future__ import annotations
 
 import io
+import json
 import zipfile
 from datetime import datetime
 from dataclasses import dataclass, field
@@ -163,15 +164,46 @@ async def get_info(ip: str, user: str, password: str, dtype: int = TYPE_TASMOTA)
     )
 
 
+def _looks_like_html(r: httpx.Response) -> bool:
+    """True if a response is a web page rather than a file download.
+
+    Trust the declared type first. Only without one look at the body — and then for
+    a real HTML start, not just a '<': a .dmp is binary and may begin with any byte
+    (typically 0x09 0x12, i.e. a tab).
+    """
+    ctype = r.headers.get("content-type", "").lower()
+    if "octet-stream" in ctype:
+        return False
+    if ctype.startswith("text/html"):
+        return True
+    head = r.content[:64].lstrip(b" \t\r\n").lower()
+    return head.startswith((b"<!doctype html", b"<html"))
+
+
+def _is_json(data: bytes) -> bool:
+    try:
+        json.loads(data)
+        return True
+    except ValueError:
+        return False
+
+
 async def download_backup(ip: str, user: str, password: str, dtype: int = TYPE_TASMOTA) -> bytes | None:
-    """Return the raw backup payload (.dmp for Tasmota, .zip bytes for WLED)."""
+    """Return the raw backup payload (.dmp for Tasmota, .zip bytes for WLED).
+
+    The payload is checked, not just the status: a Tasmota in restricted web mode
+    (WebServer 1) answers /dl with its start page and HTTP 200 — stored as a .dmp,
+    that "backup" would be worthless and nobody would notice until a restore.
+    A real config comes as application/octet-stream attachment
+    (HandleBackupConfiguration in xdrv_01_9_webserver.ino).
+    """
     async with _client(ip) as c:
         if dtype == TYPE_TASMOTA:
             try:
                 r = await c.get(f"http://{ip}/dl", auth=(user, password))
             except httpx.HTTPError:
                 return None
-            if r.status_code != 200 or not r.content:
+            if r.status_code != 200 or not r.content or _looks_like_html(r):
                 return None
             return r.content
 
@@ -182,7 +214,8 @@ async def download_backup(ip: str, user: str, password: str, dtype: int = TYPE_T
                 r = await c.get(f"http://{ip}{path}", auth=(user, password))
             except httpx.HTTPError:
                 return None
-            if r.status_code != 200:
+            # Both files are JSON; anything else (e.g. a PIN/lock page) is no backup.
+            if r.status_code != 200 or not _is_json(r.content):
                 return None
             files[fname] = r.content
         buf = io.BytesIO()
