@@ -74,6 +74,7 @@
   "settings.timezone": "Timezone",
   "settings.newpw": "New admin password",
   "settings.newpw_ph": "leave blank to keep",
+  "settings.invalid": "Invalid value, not saved: {fields}",
   "theme.auto": "auto",
   "theme.light": "light",
   "theme.dark": "dark",

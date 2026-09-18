@@ -17,7 +17,7 @@ from sqlalchemy import select
 
 from . import events, github, mqtt, tasmota, tz
 from .config import get_config
-from .db import get_setting, session_scope
+from .db import get_int, get_setting, session_scope
 from .models import LEVEL_ERROR, LEVEL_INFO, LEVEL_WARN, TYPE_WLED, Backup, Device
 from .security import decrypt, encrypt
 
@@ -168,14 +168,14 @@ async def mqtt_discover() -> tuple[bool, list[str]]:
     """
     with session_scope() as s:
         host = get_setting(s, "mqtt_host", "").strip()
-        port = get_setting(s, "mqtt_port", "1883").strip() or "1883"
+        port = get_int(s, "mqtt_port")
         user = get_setting(s, "mqtt_user", "")
         password = get_setting(s, "mqtt_password", "")
         group = get_setting(s, "mqtt_topic", "tasmotas").strip() or "tasmotas"
     if not host:
         return False, ["MQTT host not configured"]
 
-    found = await mqtt.discover(host, int(port), user, password, group)
+    found = await mqtt.discover(host, port, user, password, group)
     if found is None:
         return False, [f"MQTT connection to {host}:{port} failed"]
 
@@ -262,8 +262,8 @@ async def backup_device(device_id: int) -> tuple[bool, str]:
 
 def _cleanup_backups(device_id: int) -> None:
     with session_scope() as s:
-        max_count = int(get_setting(s, "backup_max_count", "0") or 0)
-        max_days = int(get_setting(s, "backup_max_days", "0") or 0)
+        max_count = get_int(s, "backup_max_count")
+        max_days = get_int(s, "backup_max_days")
         q = select(Backup).where(Backup.device_id == device_id).order_by(Backup.created_at.desc())
         backups = list(s.scalars(q).all())
         to_delete: list[Backup] = []

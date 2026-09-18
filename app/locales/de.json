@@ -74,6 +74,7 @@
   "settings.timezone": "Zeitzone",
   "settings.newpw": "Neues Admin-Passwort",
   "settings.newpw_ph": "leer lassen zum Beibehalten",
+  "settings.invalid": "Ungültiger Wert, nicht gespeichert: {fields}",
   "theme.auto": "automatisch",
   "theme.light": "hell",
   "theme.dark": "dunkel",

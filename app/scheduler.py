@@ -12,7 +12,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from sqlalchemy import select
 
 from . import events, service
-from .db import get_setting, session_scope
+from .db import get_int, get_setting, session_scope
 from .models import Device
 
 log = logging.getLogger("tasmobackup.scheduler")
@@ -22,7 +22,7 @@ scheduler = AsyncIOScheduler()
 async def run_scheduled_backups() -> None:
     """Back up every device whose last backup is older than the configured interval."""
     with session_scope() as s:
-        interval = int(get_setting(s, "backup_interval_hours", "24") or 24)
+        interval = get_int(s, "backup_interval_hours")
         auto_global = get_setting(s, "auto_update_global", "N") == "Y"
         mqtt_autoscan = get_setting(s, "mqtt_autoscan", "N") == "Y"
         cutoff = datetime.utcnow() - timedelta(hours=interval)
@@ -41,13 +41,17 @@ async def run_scheduled_backups() -> None:
 
     log.info("scheduled run: %d device(s) due", len(due))
     for device_id, auto_update in due:
-        ok, msg = await service.backup_device(device_id)
-        log.info(msg)
-        # Opt-in auto-update: only when the global switch AND the per-device flag are on.
-        # update_device() backs up again right before flashing, so this is safe.
-        if ok and auto_global and auto_update:
-            u_ok, u_msg = await service.update_device(device_id, force=False)
-            log.info(u_msg)
+        # One device's unexpected error must not cost every device after it its backup.
+        try:
+            ok, msg = await service.backup_device(device_id)
+            log.info(msg)
+            # Opt-in auto-update: only when the global switch AND the per-device flag
+            # are on. update_device() backs up again right before flashing.
+            if ok and auto_global and auto_update:
+                u_ok, u_msg = await service.update_device(device_id, force=False)
+                log.info(u_msg)
+        except Exception:  # noqa: BLE001 — logged with traceback, run continues
+            log.exception("scheduled run: device %s failed", device_id)
 
     events.prune()
 
@@ -63,10 +67,7 @@ async def run_online_checks() -> None:
 
 def _online_interval() -> int:
     with session_scope() as s:
-        try:
-            return int(get_setting(s, "online_check_minutes", "5") or 0)
-        except ValueError:
-            return 5
+        return get_int(s, "online_check_minutes")
 
 
 def reschedule_online_check() -> None:

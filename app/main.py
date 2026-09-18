@@ -16,7 +16,8 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from . import events, github, i18n, scheduler, service, tz
 from .config import get_config
-from .db import all_settings, get_setting, init_db, session_scope, set_setting
+from .db import (INT_SETTINGS, all_settings, get_setting, init_db, parse_int_setting,
+                 session_scope, set_setting)
 from .models import LEVEL_ERROR, LEVEL_INFO, LEVEL_WARN, Backup, Device
 from .security import hash_password, verify_password
 
@@ -87,6 +88,13 @@ def _i18n_context(request: Request) -> dict:
         "flash": flash,
         "unseen_events": events.unseen_count(),
     }
+
+
+def _tr(key: str, **kwargs: object) -> str:
+    """Translate into the UI language currently configured in the settings."""
+    with session_scope() as s:
+        lang = get_setting(s, "language", i18n.DEFAULT_LANG)
+    return i18n.translate(lang, key, **kwargs)
 
 
 def _flash(request: Request, level: str, text: str) -> None:
@@ -433,9 +441,21 @@ async def settings_form(request: Request):
     )
 
 
+# Label (locale key) of each numeric setting, for the "invalid value" message.
+_SETTING_LABELS = {
+    "backup_interval_hours": "settings.interval",
+    "backup_max_count": "settings.maxcount",
+    "backup_max_days": "settings.maxdays",
+    "online_check_minutes": "settings.online_minutes",
+    "events_max_days": "settings.events_days",
+    "mqtt_port": "settings.mqtt_port",
+}
+
+
 @app.post("/settings", dependencies=[Depends(require_login)])
 async def save_settings(request: Request):
     form = await request.form()
+    invalid: list[str] = []
     with session_scope() as s:
         for key in (
             "backup_interval_hours",
@@ -458,14 +478,24 @@ async def save_settings(request: Request):
             "notify_min_level",
             "events_max_days",
         ):
-            if key in form:
-                set_setting(s, key, str(form[key]))
+            if key not in form:
+                continue
+            value = str(form[key]).strip()
+            # A bad number is refused instead of stored: the scheduler reads these.
+            if key in INT_SETTINGS and parse_int_setting(key, value) is None:
+                invalid.append(key)
+                continue
+            set_setting(s, key, value)
         if form.get("new_password"):
             set_setting(s, "admin_password_hash", hash_password(str(form["new_password"])))
 
     # The reachability job's interval lives in the DB, so re-install it here instead
     # of making the user restart the container.
     scheduler.reschedule_online_check()
+
+    if invalid:
+        fields = ", ".join(_tr(_SETTING_LABELS[k]) for k in invalid)
+        _flash(request, LEVEL_ERROR, _tr("settings.invalid", fields=fields))
 
     # "Save & test" — deliver a probe synchronously so the result can be shown.
     if form.get("test_notify"):

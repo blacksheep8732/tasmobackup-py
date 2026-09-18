@@ -97,6 +97,34 @@ def get_setting(s: Session, key: str, default: str = "") -> str:
     return row.value if row else default
 
 
+# Numeric settings and their allowed range (inclusive). Used to validate the settings
+# form and to read values safely: a bad value must never crash the scheduler.
+INT_SETTINGS: dict[str, tuple[int, int]] = {
+    "backup_interval_hours": (1, 8760),
+    "backup_max_count": (0, 100000),
+    "backup_max_days": (0, 36500),
+    "online_check_minutes": (0, 1440),
+    "events_max_days": (0, 36500),
+    "mqtt_port": (1, 65535),
+}
+
+
+def parse_int_setting(key: str, raw: str) -> int | None:
+    """The value as int if it is a whole number within the key's range, else None."""
+    lo, hi = INT_SETTINGS[key]
+    try:
+        value = int(str(raw).strip())
+    except ValueError:
+        return None
+    return value if lo <= value <= hi else None
+
+
+def get_int(s: Session, key: str) -> int:
+    """Read a numeric setting; falls back to its default if the stored value is invalid."""
+    value = parse_int_setting(key, get_setting(s, key, DEFAULT_SETTINGS[key]))
+    return value if value is not None else int(DEFAULT_SETTINGS[key])
+
+
 def set_setting(s: Session, key: str, value: str) -> None:
     row = s.get(Setting, key)
     if row:

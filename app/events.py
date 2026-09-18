@@ -18,7 +18,7 @@ from datetime import datetime, timedelta
 import httpx
 from sqlalchemy import delete, select
 
-from .db import get_setting, session_scope
+from .db import get_int, get_setting, session_scope
 from .models import LEVEL_ERROR, LEVEL_INFO, LEVEL_ORDER, LEVEL_WARN, Device, Event
 
 log = logging.getLogger("tasmobackup.events")
@@ -178,7 +178,7 @@ def recent(limit: int = 200) -> list[Event]:
 def prune() -> None:
     """Drop events older than the configured retention so the table can't grow forever."""
     with session_scope() as s:
-        days = int(get_setting(s, "events_max_days", "30") or 0)
+        days = get_int(s, "events_max_days")
         if days <= 0:
             return
         cutoff = datetime.utcnow() - timedelta(days=days)

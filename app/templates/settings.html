@@ -5,11 +5,14 @@
   <div class="card">
     <strong>{{ t('settings.backups') }}</strong>
     <p class="row"><label style="width:240px;">{{ t('settings.interval') }}</label>
-      <input name="backup_interval_hours" value="{{ settings.backup_interval_hours }}"></p>
+      <input name="backup_interval_hours" type="number" min="1" max="8760" required
+             value="{{ settings.backup_interval_hours }}"></p>
     <p class="row"><label style="width:240px;">{{ t('settings.maxcount') }}</label>
-      <input name="backup_max_count" value="{{ settings.backup_max_count }}"></p>
+      <input name="backup_max_count" type="number" min="0" max="100000" required
+             value="{{ settings.backup_max_count }}"></p>
     <p class="row"><label style="width:240px;">{{ t('settings.maxdays') }}</label>
-      <input name="backup_max_days" value="{{ settings.backup_max_days }}"></p>
+      <input name="backup_max_days" type="number" min="0" max="36500" required
+             value="{{ settings.backup_max_days }}"></p>
   </div>
 
   <div class="card">
@@ -32,7 +35,8 @@
     <strong>{{ t('settings.online_section') }}</strong>
     <p class="muted">{{ t('settings.online_hint') }}</p>
     <p class="row"><label style="width:240px;">{{ t('settings.online_minutes') }}</label>
-      <input name="online_check_minutes" value="{{ settings.online_check_minutes or '5' }}" size="6"></p>
+      <input name="online_check_minutes" type="number" min="0" max="1440" required
+             value="{{ settings.online_check_minutes or '5' }}" style="width:6rem;"></p>
   </div>
 
   <div class="card">
@@ -53,7 +57,8 @@
         <option value="error" {{ "selected" if settings.notify_min_level == "error" }}>{{ t('level.error') }}</option>
       </select></p>
     <p class="row"><label style="width:240px;">{{ t('settings.events_days') }}</label>
-      <input name="events_max_days" value="{{ settings.events_max_days or '30' }}" size="6"></p>
+      <input name="events_max_days" type="number" min="0" max="36500" required
+             value="{{ settings.events_max_days or '30' }}" style="width:6rem;"></p>
     <p class="row">
       <button class="btn" type="submit" name="test_notify" value="1">{{ t('settings.notify_test') }}</button>
       <span class="muted">{{ t('settings.notify_test_hint') }}</span>
@@ -66,7 +71,8 @@
     <p class="row"><label style="width:240px;">{{ t('settings.mqtt_host') }}</label>
       <input name="mqtt_host" value="{{ settings.mqtt_host }}" placeholder="192.168.1.10"></p>
     <p class="row"><label style="width:240px;">{{ t('settings.mqtt_port') }}</label>
-      <input name="mqtt_port" value="{{ settings.mqtt_port or '1883' }}" placeholder="1883" size="6"></p>
+      <input name="mqtt_port" type="number" min="1" max="65535" required
+             value="{{ settings.mqtt_port or '1883' }}" placeholder="1883" style="width:6rem;"></p>
     <p class="row"><label style="width:240px;">{{ t('settings.mqtt_user') }}</label>
       <input name="mqtt_user" value="{{ settings.mqtt_user }}"></p>
     <p class="row"><label style="width:240px;">{{ t('settings.mqtt_password') }}</label>
