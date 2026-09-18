@@ -19,14 +19,28 @@ _cfg = get_config()
 _RELEASES_URL = "https://api.github.com/repos/arendst/Tasmota/releases/latest"
 _CACHE_FILE = _cfg.data_dir / "tasmota-release.json"
 _CACHE_TTL = 6 * 3600  # seconds
+# After a failed lookup, don't ask again for this long. The dashboard polls every
+# 30 s; without a pause each poll would wait for the full timeout while offline.
+_RETRY_AFTER = 10 * 60  # seconds
+_last_failure = 0.0
+
+
+def _read_cache() -> dict[str, Any] | None:
+    try:
+        return json.loads(_CACHE_FILE.read_text())
+    except (OSError, ValueError):
+        return None
+
 
 async def latest_release() -> dict[str, Any] | None:
     """Return the cached/fresh 'latest' release JSON, or None if unavailable."""
+    global _last_failure
     if _CACHE_FILE.exists() and (time.time() - _CACHE_FILE.stat().st_mtime) < _CACHE_TTL:
-        try:
-            return json.loads(_CACHE_FILE.read_text())
-        except (OSError, ValueError):
-            pass
+        cached = _read_cache()
+        if cached is not None:
+            return cached
+    if time.time() - _last_failure < _RETRY_AFTER:
+        return _read_cache()  # stale is better than waiting on a network that's down
     try:
         async with httpx.AsyncClient(timeout=15.0, headers={"User-Agent": "TasmoBackup-py"}) as c:
             r = await c.get(_RELEASES_URL)
@@ -37,12 +51,8 @@ async def latest_release() -> dict[str, Any] | None:
         return data
     except (httpx.HTTPError, ValueError, OSError):
         # Fall back to a stale cache if the network is down.
-        if _CACHE_FILE.exists():
-            try:
-                return json.loads(_CACHE_FILE.read_text())
-            except (OSError, ValueError):
-                return None
-        return None
+        _last_failure = time.time()
+        return _read_cache()
 
 
 def parse_version(version: str) -> tuple[str, str]:

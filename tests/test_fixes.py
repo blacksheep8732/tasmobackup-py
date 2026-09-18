@@ -161,3 +161,26 @@ def test_delete_device_removes_its_backups_but_nothing_outside(client, tmp_path)
     assert not any(f.exists() for f in inside)
     assert not folder.exists(), "empty device folder should be removed"
     assert outside.exists(), "a file outside the backup folder must never be deleted"
+
+
+# --- Point 5: an unreachable GitHub is not asked on every dashboard poll --------- #
+
+async def test_github_failure_pauses_retries(monkeypatch, tmp_path):
+    import httpx
+
+    from app import github
+
+    attempts = 0
+
+    async def offline(self, *a, **k):
+        nonlocal attempts
+        attempts += 1
+        raise httpx.ConnectError("offline")
+
+    monkeypatch.setattr(github, "_CACHE_FILE", tmp_path / "none.json")
+    monkeypatch.setattr(github, "_last_failure", 0.0)
+    monkeypatch.setattr(httpx.AsyncClient, "get", offline)
+
+    assert await github.latest_release() is None
+    assert await github.latest_release() is None
+    assert attempts == 1, "the second call must not hit the network again"
