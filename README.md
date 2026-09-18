@@ -4,6 +4,8 @@ A modern Python rewrite of [TasmoBackup](https://github.com/danmed/TasmoBackupV1
 backup all your Tasmota & WLED devices, and **optionally** auto-update Tasmota
 firmware (opt-in per device, always backing up first).
 
+📖 **Documentation / Dokumentation (EN/DE): [Wiki](https://github.com/blacksheep8732/tasmobackup-py/wiki)**
+
 ## Why a rewrite?
 
 The original is PHP on an end-of-life PHP 7.3 base image, has Google Analytics baked
@@ -19,7 +21,7 @@ credentials, a login wall, and a real (safe) firmware-update flow.
   (Tasmota answers HTTP 200 either way, so the response itself is checked)
 - **Online status per device** with a periodic reachability check and "last seen" age
 - **Event log + notifications**: failed backups, aborted or stuck updates and devices
-  going offline are recorded and pushed to ntfy/Gotify or a JSON webhook
+  going offline are recorded and pushed to ntfy, Gotify or a JSON webhook
 - Add devices manually, scan an IP subnet (up to a /22), or **discover via MQTT**
   (parallel async); deleting a device also deletes its backups
 - German/English UI with a simple JSON language-pack system (`app/locales/`)
@@ -27,7 +29,7 @@ credentials, a login wall, and a real (safe) firmware-update flow.
 - **Opt-in firmware auto-update**: per-device toggle + global master switch; a fresh
   backup is **always** taken immediately before flashing, and aborts if it fails
 - Login-protected web UI, encrypted device and MQTT passwords, no tracking
-- SQLite by default (MySQL/Postgres via `TB_DATABASE_URL`)
+- SQLite database in the data folder — nothing else to run
 
 ## Unraid
 
@@ -39,16 +41,15 @@ Install **TasmoBackup-py** from Community Applications, or add the template manu
 Prebuilt image: `ghcr.io/blacksheep8732/tasmobackup-py:latest`
 
 ```bash
-cp .env.example .env
-# generate a stable secret (encrypts stored passwords + signs sessions):
-echo "TB_SECRET_KEY=$(openssl rand -hex 32)" >> .env   # then edit/remove the placeholder line
-docker compose up -d --build
+cp .env.example .env      # optional: adjust login, PUID/PGID
+docker compose up -d
 ```
 
 Open http://SERVER:8259 and log in with `TB_ADMIN_USER` / `TB_ADMIN_PASSWORD`.
 
-> ⚠️ Keep `TB_SECRET_KEY` stable. If it changes, previously stored device passwords
-> can no longer be decrypted (you'd just re-enter them).
+> ⚠️ A secret key is generated on first start into `data/.secret_key` (or set
+> `TB_SECRET_KEY`). Back it up with the data folder: without it, stored device and
+> MQTT passwords can no longer be decrypted (you'd just re-enter them).
 
 ## Local development
 
@@ -67,7 +68,7 @@ pytest -q
 | `TB_ADMIN_USER` / `TB_ADMIN_PASSWORD` | `admin` / `admin` | Initial web login |
 | `TB_AUTH_ENABLED` | `true` | Set `false` if behind external auth (e.g. Traefik) |
 | `TB_DATA_DIR` | `/data` | Where DB + backups live |
-| `TB_DATABASE_URL` | *(SQLite in data dir)* | e.g. `mysql+pymysql://user:pass@host/db` |
+| `TB_DATABASE_URL` | *(SQLite in data dir)* | Other SQLAlchemy databases need their driver, which the published image does not include |
 | `TB_TASMOTA_USER` / `TB_TASMOTA_PASSWORD` | `admin` / *(empty)* | Default device credentials |
 | `TB_CONCURRENCY` | `15` | Max parallel device requests during scans/backups |
 | `PUID` / `PGID` | `1000` / `1000` | User/group the app runs as; owns the data dir (Unraid: `99` / `100`) |
@@ -128,7 +129,7 @@ reported once — before this, the scheduler's 15-minute retries produced an err
 run. A manual update click resets the state first, so it always answers.
 
 What raises an event: backup failed, pre-update backup failed (update aborted), device
-rejected the `Upgrade` command, **device still reporting the old version ~11 min after
+rejected the `Upgrade` command, **device still reporting the old version ~30 min after
 a flash** (the "update went wrong" case), **device stuck on the minimal image** (stage
 two never completed), device unreachable, device back online, restore failed.
 
@@ -180,12 +181,12 @@ app/
   config.py     env-based config
   db.py         engine, sessions, settings store
   models.py     SQLAlchemy models (Device, Backup, Event, Setting)
-  events.py     event log + outbound notifications (ntfy / webhook)
+  events.py     event log + outbound notifications (ntfy / Gotify / webhook)
   security.py   Fernet password encryption + bcrypt login
   tasmota.py    async device client (status/backup/restore/OTA)
   github.py     latest-release lookup (version comparison only)
   service.py    business logic (add/scan/backup/restore/update)
-  scheduler.py  APScheduler hourly job (interval-gated)
+  scheduler.py  APScheduler jobs: backups every 15 min (interval-gated), reachability
   main.py       FastAPI routes + UI
   templates/    Jinja2 + htmx
 tests/

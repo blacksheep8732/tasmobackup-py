@@ -1,21 +1,25 @@
 services:
   tasmobackup:
-    build: .
-    image: tasmobackup-py:latest
-    container_name: tasmobackup
+    image: ghcr.io/blacksheep8732/tasmobackup-py:latest
+    # To build from source instead: comment out `image` and uncomment `build`.
+    # build: .
+    container_name: tasmobackup-py
     ports:
       - "8259:8000"
     volumes:
       - ./data:/data
     environment:
-      # IMPORTANT: set a stable random secret (used for sessions AND to encrypt
-      # stored device passwords). Generate with: openssl rand -hex 32
-      - TB_SECRET_KEY=${TB_SECRET_KEY:?set TB_SECRET_KEY in .env}
+      # Initial web login — only used on the very first start (then change it in Settings).
       - TB_ADMIN_USER=${TB_ADMIN_USER:-admin}
       - TB_ADMIN_PASSWORD=${TB_ADMIN_PASSWORD:-admin}
+      # Optional: leave unset and a key is generated once into data/.secret_key.
+      - TB_SECRET_KEY=${TB_SECRET_KEY:-}
       # Default Tasmota credentials used when a device has none of its own.
       - TB_TASMOTA_USER=${TB_TASMOTA_USER:-admin}
       - TB_TASMOTA_PASSWORD=${TB_TASMOTA_PASSWORD:-}
+      # User/group the app runs as; the data folder is re-owned to it on start.
+      - PUID=${PUID:-1000}
+      - PGID=${PGID:-1000}
       - TZ=${TZ:-Europe/Berlin}
     labels:
       # Unraid Docker integration: WebUI button + container icon.

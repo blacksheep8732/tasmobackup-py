@@ -676,3 +676,11 @@ async def test_re_adding_with_explicit_credentials_updates_them(monkeypatch, dev
     with session_scope() as s:
         d = s.get(Device, device_id)
         assert d.username == "carl" and decrypt(d.password_enc) == "pw2"
+
+
+# --- 0.3.0 (6): the running version is visible --------------------------------- #
+
+def test_version_is_shown_in_the_header(client):
+    from app import __version__
+
+    assert f"v{__version__}" in client.get("/").text

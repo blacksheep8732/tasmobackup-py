@@ -77,7 +77,7 @@
 <body>
   {% block header %}
   <header>
-    <h1>🔌 TasmoBackup</h1>
+    <h1>🔌 TasmoBackup <span class="muted" style="font-weight:400;">v{{ version }}</span></h1>
     <nav>
       <a href="/">{{ t('nav.devices') }}</a>
       <a href="/events">{{ t('nav.events') }}{% if unseen_events %} <span class="badge">{{ unseen_events }}</span>{% endif %}</a>

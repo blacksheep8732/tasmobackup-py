@@ -21,8 +21,8 @@ class Config(BaseSettings):
 
     # --- Storage ---
     data_dir: Path = Path("/data")
-    # SQLAlchemy URL. Defaults to SQLite inside data_dir. For MySQL set e.g.
-    # TB_DATABASE_URL=mysql+pymysql://user:pass@host/tasmobackup
+    # SQLAlchemy URL. Defaults to SQLite inside data_dir. Another database needs its
+    # driver (e.g. pymysql) — the published image ships none, so use a custom build.
     database_url: str | None = None
 
     # --- Web / security ---

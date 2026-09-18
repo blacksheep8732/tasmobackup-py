@@ -14,7 +14,7 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy import select
 from starlette.middleware.sessions import SessionMiddleware
 
-from . import events, github, i18n, scheduler, service, tz
+from . import __version__, events, github, i18n, scheduler, service, tz
 from .config import get_config
 from .db import (INT_SETTINGS, all_settings, get_setting, init_db, parse_int_setting,
                  session_scope, set_setting)
@@ -88,6 +88,7 @@ def _i18n_context(request: Request) -> dict:
         "ago": ago,
         "flash": flash,
         "unseen_events": events.unseen_count(),
+        "version": __version__,
     }
 
 
@@ -145,6 +146,7 @@ templates = Jinja2Templates(directory=str(BASE_DIR / "templates"), context_proce
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    _app_log.info("TasmoBackup-py %s starting", __version__)
     init_db()
     _ensure_admin()
     _encrypt_legacy_mqtt_password()
