@@ -116,8 +116,8 @@ a dashboard banner) and, if a target URL is configured, pushed out over HTTP:
 
 | Setting | Meaning |
 |---|---|
-| *Target URL* | e.g. `https://ntfy.sh/your-secret-topic`, a self-hosted ntfy/Gotify, or any webhook |
-| *Format* | `ntfy` (plain-text body, `Title`/`Priority`/`Tags` headers) or `json` (`{level, device, message, time}`) |
+| *Target URL* | e.g. `https://ntfy.sh/your-secret-topic`, `https://gotify.example/message?token=<app token>`, or any webhook |
+| *Format* | `ntfy` (plain-text body, `Title`/`Priority`/`Tags` headers), `gotify` (`{title, message, priority}`) or `json` (`{level, device, message, time}`) |
 | *Notify from level* | `info`, `warn` or `error` — defaults to `warn` |
 | *Keep events* | prune the log after n days |
 

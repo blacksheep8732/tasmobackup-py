@@ -583,3 +583,33 @@ async def test_binary_config_starting_like_markup_is_kept(monkeypatch):
         assert await tasmota.download_backup("10.0.0.9", "admin", "") == body
     _fake_http(monkeypatch, {"/dl": (200, "", b"\x09\x12\x5c\x4d binary")})   # no type at all
     assert await tasmota.download_backup("10.0.0.9", "admin", "") == b"\x09\x12\x5c\x4d binary"
+
+
+# --- 0.3.0 (2): Gotify gets what it requires; rejected pushes are logged --------- #
+
+def test_gotify_payload_has_the_required_fields():
+    from app.events import _post_args
+    from app.models import LEVEL_ERROR
+
+    args = _post_args("gotify", LEVEL_ERROR, "backup failed", "Küche")
+    assert args == {"json": {"title": "TasmoBackup: Küche", "message": "backup failed", "priority": 8}}
+
+
+async def test_rejected_notification_is_logged(monkeypatch, caplog):
+    import httpx
+
+    from app import events
+    from app.models import LEVEL_ERROR
+
+    async def reject(self, url, **kw):
+        return httpx.Response(400, text='{"error":"message required"}')
+
+    monkeypatch.setattr(httpx.AsyncClient, "post", reject)
+    with caplog.at_level("WARNING", logger="tasmobackup.events"):
+        await events._send("https://gotify.invalid/message?token=x", "ntfy", LEVEL_ERROR, "x", "Dev")
+    assert "rejected: HTTP 400" in caplog.text
+
+
+def test_settings_offer_gotify(client):
+    page = client.get("/settings").text
+    assert 'value="gotify"' in page and "ntfy / Gotify" not in page

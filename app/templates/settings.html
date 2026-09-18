@@ -47,7 +47,8 @@
              placeholder="https://ntfy.sh/mein-geheimes-topic"></p>
     <p class="row"><label style="width:240px;">{{ t('settings.notify_format') }}</label>
       <select name="notify_format">
-        <option value="ntfy" {{ "selected" if settings.notify_format != "json" }}>ntfy / Gotify</option>
+        <option value="ntfy" {{ "selected" if settings.notify_format not in ("json", "gotify") }}>ntfy</option>
+        <option value="gotify" {{ "selected" if settings.notify_format == "gotify" }}>Gotify</option>
         <option value="json" {{ "selected" if settings.notify_format == "json" }}>JSON-Webhook</option>
       </select></p>
     <p class="row"><label style="width:240px;">{{ t('settings.notify_level') }}</label>

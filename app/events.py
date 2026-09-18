@@ -96,32 +96,34 @@ def record(level: str, message: str, device_id: int | None = None,
         log.debug("no event loop, notification skipped")
 
 
-async def _send(url: str, fmt: str, level: str, message: str, device_name: str) -> None:
+# Gotify uses 0-10; 2/5/8 are the usual "low / normal / high" picks.
+_GOTIFY_PRIORITY = {LEVEL_INFO: 2, LEVEL_WARN: 5, LEVEL_ERROR: 8}
+
+
+def _post_args(fmt: str, level: str, message: str, device_name: str) -> dict:
+    """httpx.post() keyword arguments for one notification in the chosen format."""
     title = f"TasmoBackup: {device_name}" if device_name else "TasmoBackup"
+    if fmt == "json":
+        return {"json": {"level": level, "device": device_name, "message": message,
+                         "time": utcnow().isoformat() + "Z"}}
+    if fmt == "gotify":
+        # POST /message?token=<app token>; "message" is required by Gotify.
+        return {"json": {"title": title, "message": message,
+                         "priority": _GOTIFY_PRIORITY.get(level, 5)}}
+    # ntfy: plain-text body, metadata in headers.
+    return {"content": message.encode("utf-8"),
+            "headers": {"Title": _header_safe(title),
+                        "Priority": _NTFY_PRIORITY.get(level, "3"),
+                        "Tags": _NTFY_TAGS.get(level, "information_source")}}
+
+
+async def _send(url: str, fmt: str, level: str, message: str, device_name: str) -> None:
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
-            if fmt == "json":
-                await client.post(
-                    url,
-                    json={
-                        "level": level,
-                        "device": device_name,
-                        "message": message,
-                        "time": utcnow().isoformat() + "Z",
-                    },
-                )
-            else:
-                # ntfy: plain-text body, metadata in headers. Works with ntfy.sh and
-                # self-hosted instances; headers are ignored harmlessly elsewhere.
-                await client.post(
-                    url,
-                    content=message.encode("utf-8"),
-                    headers={
-                        "Title": _header_safe(title),
-                        "Priority": _NTFY_PRIORITY.get(level, "3"),
-                        "Tags": _NTFY_TAGS.get(level, "information_source"),
-                    },
-                )
+            r = await client.post(url, **_post_args(fmt, level, message, device_name))
+        if r.status_code >= 400:
+            # Otherwise a rejected push (wrong format, bad token) would vanish silently.
+            log.warning("notification to %s rejected: HTTP %s", url, r.status_code)
     except Exception as exc:  # noqa: BLE001 — a push must never break a backup run
         log.warning("notification to %s failed: %s", url, exc)
 
@@ -132,17 +134,8 @@ async def send_test(url: str, fmt: str = "ntfy") -> tuple[bool, Msg]:
         return False, msg("msg.notify_no_url")
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
-            if fmt == "json":
-                r = await client.post(
-                    url, json={"level": LEVEL_INFO, "device": "", "message": "TasmoBackup test",
-                               "time": utcnow().isoformat() + "Z"}
-                )
-            else:
-                r = await client.post(
-                    url,
-                    content=b"TasmoBackup test notification",
-                    headers={"Title": "TasmoBackup", "Priority": "3", "Tags": "white_check_mark"},
-                )
+            r = await client.post(url, **_post_args(fmt, LEVEL_INFO,
+                                                    "TasmoBackup test notification", ""))
         if r.status_code < 400:
             return True, msg("msg.notify_sent", code=r.status_code)
         return False, msg("msg.notify_http", code=r.status_code)
