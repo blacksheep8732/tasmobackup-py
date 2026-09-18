@@ -141,6 +141,43 @@ async def add_device(ip: str, username: str = "", password: str = "") -> str:
     return f"{ip}: {info.name or ip} added."
 
 
+def _remove_backup_file(filename: str) -> None:
+    """Delete a backup file — but only if it really lies inside the backup folder."""
+    path = Path(filename).resolve()
+    root = _cfg.backup_dir.resolve()
+    if path.is_relative_to(root):
+        path.unlink(missing_ok=True)
+    else:
+        log.warning("refusing to delete %s: outside %s", path, root)
+
+
+def delete_device(device_id: int) -> bool:
+    """Remove a device together with its backups (rows and files).
+
+    Left behind, the backups would be invisible in the UI and never pruned again,
+    and re-adding the device creates a new id that doesn't see them either. The
+    event log is kept — it stores the device name, so the history stays readable.
+    """
+    with session_scope() as s:
+        device = s.get(Device, device_id)
+        if not device:
+            return False
+        folders = set()
+        for b in s.scalars(select(Backup).where(Backup.device_id == device_id)).all():
+            _remove_backup_file(b.filename)
+            folders.add(Path(b.filename).resolve().parent)
+            s.delete(b)
+        s.delete(device)
+    root = _cfg.backup_dir.resolve()
+    for folder in folders:
+        # Only the device's own sub-folder, and only once it is empty.
+        if folder != root and folder.is_relative_to(root) and folder.is_dir() \
+                and not any(folder.iterdir()):
+            folder.rmdir()
+    _updating.discard(device_id)
+    return True
+
+
 async def scan_subnet(cidr: str, username: str = "", password: str = "") -> list[str]:
     """Probe every host in a CIDR range and add the ones that answer."""
     try:
@@ -273,7 +310,7 @@ def _cleanup_backups(device_id: int) -> None:
             cutoff = datetime.utcnow() - timedelta(days=max_days)
             to_delete += [b for b in backups if b.created_at < cutoff]
         for b in set(to_delete):
-            Path(b.filename).unlink(missing_ok=True)
+            _remove_backup_file(b.filename)
             s.delete(b)
 
 

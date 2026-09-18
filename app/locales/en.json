@@ -51,7 +51,7 @@
   "btn.save": "Save settings",
   "confirm.update": "Update firmware of {name}? A backup is taken first.",
   "confirm.update_custom": "WARNING: {name} runs custom firmware ({version}). An update flashes the image from the device OtaUrl and may replace the custom build with official firmware. Continue anyway? A backup is taken first.",
-  "confirm.delete": "Delete {name}?",
+  "confirm.delete": "Delete {name} and all of its backups?",
   "confirm.restore": "Restore this backup to {name}?",
   "backups.title": "Backups",
   "backups.empty": "No backups yet.",

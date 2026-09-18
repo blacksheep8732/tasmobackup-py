@@ -132,3 +132,32 @@ def test_dashboard_marks_custom_build_instead_of_outdated(client, device_id, mon
     assert "eigene Firmware" in row or "custom build" in row
     assert "veraltet" not in row and "outdated" not in row
     assert "ACHTUNG" in html.unescape(row) or "WARNING" in html.unescape(row)
+
+
+# --- Point 4: deleting a device removes its backups ----------------------------- #
+
+def test_delete_device_removes_its_backups_but_nothing_outside(client, tmp_path):
+    from app.config import get_config
+
+    folder = get_config().backup_dir / "Loeschtest"
+    folder.mkdir(parents=True, exist_ok=True)
+    inside = [folder / "a.dmp", folder / "b.dmp"]
+    outside = tmp_path / "keep-me.dmp"
+    for f in inside + [outside]:
+        f.write_bytes(b"x")
+    with session_scope() as s:
+        d = Device(name="Loeschtest", ip="10.8.0.1", mac="DD0000000001")
+        s.add(d)
+        s.flush()
+        did = d.id
+        for f in inside + [outside]:
+            s.add(Backup(device_id=did, name="Loeschtest", filename=str(f)))
+
+    client.post(f"/devices/{did}/delete")
+
+    with session_scope() as s:
+        assert s.get(Device, did) is None
+        assert s.query(Backup).filter(Backup.device_id == did).count() == 0
+    assert not any(f.exists() for f in inside)
+    assert not folder.exists(), "empty device folder should be removed"
+    assert outside.exists(), "a file outside the backup folder must never be deleted"

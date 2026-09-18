@@ -294,10 +294,7 @@ async def edit_device(device_id: int, name: str = Form(""), auto_name: str = For
 
 @app.post("/devices/{device_id}/delete", dependencies=[Depends(require_login)])
 async def delete_device(device_id: int):
-    with session_scope() as s:
-        d = s.get(Device, device_id)
-        if d:
-            s.delete(d)
+    service.delete_device(device_id)
     return RedirectResponse("/", status_code=303)
 
 

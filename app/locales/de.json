@@ -51,7 +51,7 @@
   "btn.save": "Einstellungen speichern",
   "confirm.update": "Firmware von {name} aktualisieren? Vorher wird ein Backup erstellt.",
   "confirm.update_custom": "ACHTUNG: {name} läuft mit eigener Firmware ({version}). Ein Update spielt das Image aus der OtaUrl des Geräts ein und kann den Eigenbau durch die offizielle Firmware ersetzen. Trotzdem fortfahren? Vorher wird ein Backup erstellt.",
-  "confirm.delete": "{name} wirklich löschen?",
+  "confirm.delete": "{name} und alle seine Backups wirklich löschen?",
   "confirm.restore": "Dieses Backup auf {name} wiederherstellen?",
   "backups.title": "Backups",
   "backups.empty": "Noch keine Backups.",
