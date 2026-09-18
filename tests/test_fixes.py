@@ -409,3 +409,15 @@ def test_scan_reports_bad_or_huge_subnets_as_errors(client):
     page = client.post("/scan", data={"subnet_base": "10.0.0.0", "subnet_cidr": "16"},
                        follow_redirects=True).text
     assert "zu groß" in page
+
+
+async def test_restore_failure_on_esp32_is_not_success(monkeypatch):
+    """ESP32 pages carry a header script with setTimeout() on every page — a failed
+    upload must still be recognised (regression of the first marker choice)."""
+    from app import tasmota
+
+    esp32_header = "<script>function x(){setTimeout(x,100);}setTimeout(y,200);</script>"
+    _fake_device(monkeypatch, 200, esp32_header + _U2_FAIL)
+    assert await tasmota.restore_backup("10.0.0.9", "admin", "", b"cfg") is False
+    _fake_device(monkeypatch, 200, esp32_header + _U2_OK)
+    assert await tasmota.restore_backup("10.0.0.9", "admin", "", b"cfg") is True

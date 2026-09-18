@@ -191,11 +191,14 @@ async def download_backup(ip: str, user: str, password: str, dtype: int = TYPE_T
         return buf.getvalue()
 
 
-# Only a successful upload makes Tasmota's /u2 page reload itself (it restarts).
+# Only a successful upload makes Tasmota's /u2 page reload itself (it restarts):
+# HTTP_SCRIPT_RELOAD_TIME = "setTimeout(function(){location.href='.';},%d);".
 # The status is 200 either way and the "Successful"/"Failed" words are translated
 # (tasmota-DE says "Erfolgreich"), so this script is the language-independent tell.
-# See HandleUploadDone() in xdrv_01_9_webserver.ino.
-_UPLOAD_OK_MARKER = "setTimeout("
+# It must be the specific part: a bare "setTimeout(" also occurs in the header every
+# ESP32 page carries (HTTP_HEAD_LAST_SCRIPT32), which would make failures look fine.
+# See HandleUploadDone() in xdrv_01_9_webserver.ino (checked against v15.6.0).
+_UPLOAD_OK_MARKER = "location.href='.'"
 
 
 async def restore_backup(ip: str, user: str, password: str, data: bytes) -> bool:
