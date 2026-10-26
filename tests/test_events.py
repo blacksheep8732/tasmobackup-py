@@ -1,7 +1,23 @@
 """Tests for the online-status tracking, event log and notification plumbing."""
-from app import events, service, tasmota
+from datetime import datetime, timezone
+
+import pytest
+
+from app import events, service, tasmota, tz
 from app.db import session_scope, set_setting
 from app.models import LEVEL_ERROR, LEVEL_INFO, LEVEL_WARN, Device
+
+
+@pytest.fixture
+def summer(monkeypatch):
+    """Pin the server clock to summer, where Berlin is UTC+2.
+
+    The timezone tests treat 120 as the correct offset; without this they fail
+    every winter (first seen 2026-10-26, the day after the switch back).
+    """
+    real = tz.offset_minutes
+    midsummer = datetime(2026, 7, 1, 12, tzinfo=timezone.utc)
+    monkeypatch.setattr(tz, "offset_minutes", lambda name, at=None: real(name, at or midsummer))
 
 
 def test_migration_added_columns():
@@ -290,7 +306,7 @@ def test_tz_offset_is_read_from_status():
     assert _tz_offset_from_status({}) is None
 
 
-async def test_sync_timezone_sends_backlog(monkeypatch, device_id):
+async def test_sync_timezone_sends_backlog(monkeypatch, device_id, summer):
     """Syncing must send exactly the derived commands, in one Backlog call."""
     sent = []
 
@@ -330,7 +346,7 @@ def test_fixed_offset_is_detected_even_when_it_matches_today():
     assert _tz_dst_from_status({}) is None
 
 
-async def test_dashboard_flags_both_kinds_of_mismatch(client):
+async def test_dashboard_flags_both_kinds_of_mismatch(client, summer):
     """Wrong-now and correct-by-accident must both show up."""
     import uuid
     from datetime import datetime as dt
@@ -376,7 +392,7 @@ async def test_dashboard_flags_both_kinds_of_mismatch(client):
                     s.delete(d)
 
 
-async def test_sync_waits_before_reading_back(monkeypatch, device_id):
+async def test_sync_waits_before_reading_back(monkeypatch, device_id, summer):
     """Regression: Tasmota applies Backlog commands with a delay.
 
     Reading the zone back immediately returned the OLD offset, so a successful sync
